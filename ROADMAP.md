@@ -29,12 +29,12 @@ Este documento centraliza el plan de ataque del proyecto, basado en los blueprin
 - [ ] Fine-tuning (Continual Pre-training) del modelo de Fase 1 con el dataset CoT.
 
 ## Fase 3: Uso de Herramientas (Tool-Calling)
-- [ ] **3.1. Generación de Dataset Sintético:**
-  - [ ] Crear script para generar ejemplos de consulta -> decisión de tool-call -> resultado -> respuesta.
+- [x] **3.1. Generación de Dataset Sintético:**
+  - [x] Crear script para generar ejemplos de consulta -> decisión de tool-call -> resultado -> respuesta.
 - [ ] **3.2. Formato y Entrenamiento:**
   - [ ] Implementar tokens especiales (`<TOOL_CALL>`, `</TOOL_CALL>`, `<TOOL_RESULT>`).
   - [ ] Entrenar el modelo sobre la sintaxis estricta.
-- [ ] **3.3. Inferencia Interactiva (`chat.py`):**
-  - [ ] Desarrollar sistema interactivo que pause la generación de texto al detectar un `<TOOL_CALL>`.
-  - [ ] Conectar una herramienta real (ej. DuckDuckGo o Wikipedia).
-  - [ ] Retroalimentar el `<TOOL_RESULT>` al modelo y continuar hasta la respuesta final.
+- [x] **3.3. Inferencia Interactiva (`chat.py`):**
+  - [x] Desarrollar sistema interactivo que pause la generación de texto al detectar un `<TOOL_CALL>`.
+  - [x] Conectar una herramienta real (ej. DuckDuckGo o Wikipedia).
+  - [x] Retroalimentar el `<TOOL_RESULT>` al modelo y continuar hasta la respuesta final.
