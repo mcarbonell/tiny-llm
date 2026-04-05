@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Entornos virtuales
+venv/
+env/
+.venv/
+
+# PyTorch y Checkpoints
+*.pt
+*.pth
+*.ckpt
+checkpoints/
+
+# Logs e Imágenes temporales
+logs/
+*.log
+
+# Datos generados locales
+data/
+*.bin
+*.json
+!model/tokenizer.json
+
+# IDE / Varios
+.DS_Store
+.idea/
+.vscode/
