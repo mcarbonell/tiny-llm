@@ -9,7 +9,7 @@ Este documento centraliza el plan de ataque del proyecto, basado en los blueprin
 - [ ] **1.2. Tokenizador y Datos:**
   - [x] Descargar un subtipo de `roneneldan/TinyStories`.
   - [x] Entrenar Tokenizador BPE personalizado (~16k-32k vocabulario).
-  - [ ] Tokenizar y guardar el dataset de entrenamiento en binario para carga rápida.
+  - [x] Tokenizar y guardar el dataset de entrenamiento en binario para carga rápida.
 - [x] **1.3. Arquitectura del Modelo (`model.py`):**
   - [x] Implementar Decoder-only Transformer genérico.
   - [x] Integrar RoPE (Rotary Position Embeddings).

@@ -51,7 +51,7 @@ Si eres un agente de IA leyendo este documento para inicializar el proyecto, sig
 *   **Paso 3: Bucle de Entrenamiento (train.py)**
     *   Escribe el loop de entrenamiento. Debe soportar Gradient Accumulation, Mixed Precision (bf16/fp16) y guardar checkpoints (`.pt`).
     *   Haz una prueba de entrenamiento local (100 iteraciones) para verificar que el loss disminuye.
-*   **Paso 4: Generación Sintética de Datos (tools_dataset.py)**
+*   **Paso 4: Generación Sintética de Datos (`generate_synthetic_data.py`)**
     *   Escribe el script para generar el dataset de la Fase 3 usando llamadas asíncronas a una API (deja los placeholders de las API keys listos para el usuario).
 *   **Paso 5: Inferencia y Bucle de Herramientas (chat.py)**
     *   Escribe un script de chat iterativo. Si el modelo genera `<TOOL_CALL>`, el script de Python debe detener la generación, extraer la query, hacer una petición real a Wikipedia/DuckDuckGo, empaquetar el resultado en `<TOOL_RESULT>` y reanudar la generación del modelo.

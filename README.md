@@ -1,9 +1,10 @@
 # 🧠 TinyThinker (LLM Lógico Minimalista)
 
-![Status](https://img.shields.io/badge/Status-En_Desarrollo-yellow?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Fase_1_Entrenando-blue?style=for-the-badge)
 ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
+![Params](https://img.shields.io/badge/Params-12.46M_(pretraining)-lightgrey?style=for-the-badge)
 
-Un experimento educativo para construir, entrenar y evaluar un Modelo de Lenguaje Pequeño/Grande experimental **(~100M parámetros)** completamente desde cero usando PyTorch. 
+Un experimento educativo para construir, entrenar y evaluar un Modelo de Lenguaje Pequeño/Grande experimental completamente desde cero usando PyTorch. El modelo de **pre-entrenamiento actual tiene 12.46M parámetros** (dim=256, 6 capas), escala pensada para validar el pipeline en CPU local. El objetivo final es escalar a **100M–300M parámetros** en entorno cloud.
 
 El modelo se basa en la filosofía de **"Cerebro Pequeño, Lógica Fuerte"**, donde el razonamiento (*Chain of Thought*) prevalece sobre el almacenamiento masivo de datos factuales, apoyándose en la externalización de conocimientos usando la herramienta autónoma de búsqueda **(Tool-calling)**.
 
@@ -27,6 +28,24 @@ En lugar de basarnos en el viejo paper de 2017, la arquitectura del Transformer 
 - `/tests`: Unit-tests de integridad matricial de PyTorch.
 - `/docs`: Documentos de diseño subyacentes e ideas futuras.
 - `/logs`: Histórico y analíticas de la evolución del hiperparámetro Loss durante los entrenamientos.
+
+## ⚡ Quick Start
+```bash
+# 1. Instalar dependencias
+pip install -r requirements.txt
+
+# 2. Descargar TinyStories y entrenar tokenizador BPE
+python scripts/download_and_tokenize.py
+
+# 3. Tokenizar y guardar el dataset en binario
+python scripts/prepare_data.py
+
+# 4. Arrancar el pre-entrenamiento
+python scripts/train.py
+
+# 5. (Opcional) Inferencia interactiva con tool-calling
+python scripts/chat.py
+```
 
 ---
 *Construido artesanalmente desde cero.*

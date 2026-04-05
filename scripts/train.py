@@ -39,10 +39,20 @@ elif getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
     device = 'mps'
 
 # AMP (Precisión Mixta Automática):
-# El flag nativo para bf16/fp16, acelerando el entreno un ~2x en hardware moderno (incluso CPU recientes de AMD como la 8845HS)
-ptdtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float32
-ctx = torch.amp.autocast(device_type=device, dtype=ptdtype) if device == 'cuda' else contextlib.nullcontext()
+# BF16 en CPU (AMD 8845HS lo soporta nativamente) da un ~1.5-2x de speedup.
+# En CUDA usamos bf16 si está soportado, si no fp32. GradScaler solo aplica para fp16.
+if device == 'cuda':
+    ptdtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+elif device == 'cpu':
+    ptdtype = torch.bfloat16  # AVX-512 BF16 nativo en Zen 4
+else:
+    ptdtype = torch.float32
+
+ctx = torch.amp.autocast(device_type=device if device != 'mps' else 'cpu', dtype=ptdtype)
 scaler = torch.cuda.amp.GradScaler(enabled=(ptdtype == torch.float16 and device == 'cuda'))
+
+# Fracción del dataset reservada para validación (nunca vista en entrenamiento)
+val_fraction = 0.05
 
 # ----------------------------------
 # Cargador de Datos (Memmap)
@@ -50,13 +60,19 @@ scaler = torch.cuda.amp.GradScaler(enabled=(ptdtype == torch.float16 and device 
 if not os.path.exists(data_path):
     raise FileNotFoundError(f"¡Oops! Falta {data_path}. Corre scripts/prepare_data.py")
 
-train_data = np.memmap(data_path, dtype=np.uint16, mode='r')
+full_data = np.memmap(data_path, dtype=np.uint16, mode='r')
 
-def get_batch():
+# Split estático train / val (el val es el último 5% del array, nunca toca train)
+_val_start = int(len(full_data) * (1.0 - val_fraction))
+train_data = full_data[:_val_start]
+val_data   = full_data[_val_start:]
+
+def get_batch(split='train'):
+    data = train_data if split == 'train' else val_data
     # Toma de muestra aleatoria continua en el array uint16
-    ix = torch.randint(len(train_data) - seq_len, (batch_size,))
-    x = torch.stack([torch.from_numpy((train_data[i:i+seq_len]).astype(np.int64)) for i in ix])
-    y = torch.stack([torch.from_numpy((train_data[i+1:i+1+seq_len]).astype(np.int64)) for i in ix])
+    ix = torch.randint(len(data) - seq_len, (batch_size,))
+    x = torch.stack([torch.from_numpy((data[i:i+seq_len]).astype(np.int64)) for i in ix])
+    y = torch.stack([torch.from_numpy((data[i+1:i+1+seq_len]).astype(np.int64)) for i in ix])
     
     if device == 'cuda':
         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
@@ -66,17 +82,20 @@ def get_batch():
 
 @torch.no_grad()
 def estimate_loss(model):
+    """Estima la loss en ambos splits (train y val) para ver si hay overfitting."""
     model.eval()
-    losses = torch.zeros(eval_iters)
-    for k in range(eval_iters):
-        X, Y = get_batch()
-        with ctx:
-            logits = model(X)
-            # Entropía Cruzada calculada achatada
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), Y.view(-1))
-        losses[k] = loss.item()
+    out = {}
+    for split in ('train', 'val'):
+        losses = torch.zeros(eval_iters)
+        for k in range(eval_iters):
+            X, Y = get_batch(split)
+            with ctx:
+                logits = model(X)
+                loss = F.cross_entropy(logits.view(-1, logits.size(-1)), Y.view(-1))
+            losses[k] = loss.item()
+        out[split] = losses.mean().item()
     model.train()
-    return losses.mean().item()
+    return out
 
 def get_lr(it):
     # Linear Warmup + Cosine Decay
@@ -157,16 +176,22 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
             
         # 2. Validación Periódica y Logging
         if iter_num % eval_interval == 0 and iter_num > 0:
-            val_loss = estimate_loss(model)
-            t_print(f"✨ [ITER {iter_num}] Error Muestral: {val_loss:.4f} | Guardando Checkpoint...")
+            losses = estimate_loss(model)
+            t_print(f"✨ [ITER {iter_num}] train_loss: {losses['train']:.4f} | val_loss: {losses['val']:.4f} | Guardando Checkpoint...")
             checkpoint = {
                 'model': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
                 'iter_num': iter_num,
                 'args': args,
-                'val_loss': val_loss
+                'val_loss': losses['val']
             }
-            torch.save(checkpoint, os.path.join(out_dir, f'ckpt.pt'))
+            # Checkpoint rotativo con número de iteración
+            torch.save(checkpoint, os.path.join(out_dir, f'ckpt_{iter_num:05d}.pt'))
+            # Checkpoint del mejor modelo según val_loss
+            if not hasattr(estimate_loss, '_best_val') or losses['val'] < estimate_loss._best_val:
+                estimate_loss._best_val = losses['val']
+                torch.save(checkpoint, os.path.join(out_dir, 'ckpt_best.pt'))
+                t_print(f"🏆 Nuevo mejor modelo guardado (val_loss={losses['val']:.4f})")
 
         # 3. Micro-Steps de Entrenamiento (Acumulación de Gradientes)
         optimizer.zero_grad(set_to_none=True)
