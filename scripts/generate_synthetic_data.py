@@ -1,75 +1,103 @@
 import os
 import json
 import random
+from openai import OpenAI
 
-# Este es un template para generar datos sintéticos "offline".
-# Su objetivo real es generar miles de ejemplos con un LLM "Profesor" (ej. GPT-4 / Claude) 
-# para enseñarle a nuestro pequeño TinyThinker cuándo y cómo usar la herramienta estricta.
+# Este script utiliza un LLM real ("Profesor") para generar un dataset estructurado.
+OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "tool_dataset_real.json")
 
-OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "tool_dataset.json")
+# ==========================================
+# CONFIGURACIÓN DEL LLM PROFESOR
+# ==========================================
+# Descomenta y ajusta el bloque que prefieras usar:
 
-# -----------------
-# Batería de ejemplos pre-concebidos (Mock API)
-# En el mundo real, aquí usaríamos una librería como `openai` (openai.ChatCompletion.create)
-# pasándole un System Prompt para que actuara de generador de formatos estrictos.
-# -----------------
+# --- Opción 1: OLLAMA (Local) ---
+# client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+# MODEL_NAME = "llama3" # Cambialo por el modelo que tengas (ej: phi3, mistral, llama3)
 
-FACTUAL_QUESTIONS = [
-    "Who is the current president of France?",
-    "What is the capital of Australia?",
-    "When did the Apollo 11 moon landing happen?",
-    "How tall is the Eiffel Tower?",
-    "Who directed the movie Inception?"
+# --- Opción 2: LM STUDIO (Local) ---
+client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
+MODEL_NAME = "google/gemma-4-26b-a4b"
+
+# --- Opción 3: OPENROUTER (Cloud Gratuito) ---
+# client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key="SK-OR-TU-API-KEY")
+# MODEL_NAME = "google/gemma-7b-it:free"
+
+SYSTEM_PROMPT = """You are generating synthetic training data for a smaller AI model.
+I will give you a question. You must reply IN THIS EXACT FORMAT, acting as a model that refuses to guess facts and uses external tools instead:
+
+<THINK> [Briefly explain why you need to search] </THINK> <TOOL_CALL> search("[exact short query terms]") </TOOL_CALL> <TOOL_RESULT> [Invent a highly realistic search result snippet] </TOOL_RESULT> [Provide the final answer based ONLY on the result].
+
+Example response:
+<THINK> I don't store factual demographic data. I must search the web to be accurate. </THINK> <TOOL_CALL> search("Paris population 2023") </TOOL_CALL> <TOOL_RESULT> According to the 2023 census, the population of Paris is 2.1 million. </TOOL_RESULT> Based on the search, the population of Paris is 2.1 million.
+"""
+
+QUESTIONS = [
+    "Who won the soccer world cup in 1998?",
+    "What is the geographical deepest point in the ocean?",
+    "Who wrote the book '1984'?",
+    "What is the speed of light in vacuum?",
+    "Who directed the movie Interstellar?",
+    "What is the capital of Canada?",
+    "When did the Roman Empire fall?",
+    "How tall is Mount Everest in meters?"
 ]
 
-def generate_mock_example(query: str):
+def generate_real_example(query: str):
     """
-    Simula la generación de una traza perfecta para enseñar uso de herramientas.
-    El LLM Profesor generaría este texto basándose en instrucciones de comportamiento.
+    Envía la petición al LLM (Ollama/LM Studio) y recupera la traza.
     """
-    
-    # 1. El usuario pregunta algo que la red NO DEBE MEMORIZAR
-    user_part = f"User: {query}\nAssistant: "
-    
-    # 2. El asistente "Pisa el freno" y razona estructuralmente
-    think_part = "<THINK> I don't store factual data. I need to search the web to answer safely. </THINK> "
-    
-    # 3. Extrae la entidad a buscar y llama a la herramienta estrictamente
-    tool_query = query.replace("?", "").replace("Who is ", "").replace("What is ", "").replace("When did ", "")
-    tool_call_part = f"<TOOL_CALL> search(\"{tool_query.strip()}\") </TOOL_CALL>"
-    
-    # 4. El entorno (en fase de datos) inyecta el resultado fingido para que aprenda a leerlo
-    tool_res_part = f" <TOOL_RESULT> According to Wiki, relevant search result for {tool_query} is available. </TOOL_RESULT> "
-    
-    # 5. La respuesta final amalgamada basándose SÓLO en la lectura anterior
-    final_ans = f"Based on my search, the current factual information about {tool_query.strip()} is available."
-    
-    # Ensamblamos el bloque de entrenamiento puro.
-    full_text = user_part + think_part + tool_call_part + tool_res_part + final_ans + " <eos>"
-    return {"text": full_text}
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": query}
+            ],
+            temperature=0.7,
+            max_tokens=250
+        )
+        assistant_resp = response.choices[0].message.content.strip()
+        
+        # Validar rudimentariamente que el modelo ha seguido el formato
+        if "<THINK>" not in assistant_resp or "<TOOL_CALL>" not in assistant_resp:
+            return None
+            
+        # Ensamblaje final de la línea conversacional para TinyThinker
+        full_text = f"User: {query}\nAssistant: {assistant_resp} <eos>"
+        print(f"Generado correctamente: '{query[:30]}...'")
+        return {"text": full_text}
+    except Exception as e:
+        print(f"Error conectando a la API: {e}. ¿Está Ollama/LMStudio ejecutándose?")
+        return None
 
 def main():
-    print("⏳ Iniciando generación de dataset de Herramientas + Chain of Thought...")
+    print(f"Iniciando generación usando modelo profesor: '{MODEL_NAME}'")
     
+    # Para usar la librería openai necesitas instalarla: `pip install openai`
+    try:
+        import openai
+    except ImportError:
+        print("Falta la librería 'openai'. Instálala con: pip install openai")
+        return
+
     dataset = []
     
-    # Generar iterando
-    for i in range(500):
-        # En producción: batch_request a OpenAI
-        q = random.choice(FACTUAL_QUESTIONS)
-        example = generate_mock_example(q)
-        dataset.append(example)
-        if (i+1) % 100 == 0:
-            print(f"✅ Generados {i+1} ejemplos sintéticos...")
+    # En un caso real iteraríamos sobre un archivo con 10,000 preguntas de QA genéricas
+    # Aquí lo haremos x veces escupiendo Random questions.
+    ITERATIONS = 50 
+    
+    for _ in range(ITERATIONS):
+        q = random.choice(QUESTIONS)
+        example = generate_real_example(q)
+        if example:
+            dataset.append(example)
             
-    # Guardar en JSON (esto luego se tokenizaría a un archivo .bin, igual que con TinyStories)
     os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(dataset, f, indent=4, ensure_ascii=False)
         
-    print(f"\n🚀 ¡Dataset sintético guardado en {OUTPUT_FILE} con {len(dataset)} ejemplos!")
-    print("Nota: El archivo ha sido guardado puro en JSON. El siguiente paso en cadena de producción")
-    print("sería pre-tokenizarlo y volver a arrancar train.py con él para el famoso 'Fine-Tuning'.")
+    print(f"\n¡Proceso finalizado! Se guardaron {len(dataset)} ejemplos reales en {OUTPUT_FILE}.")
 
 if __name__ == "__main__":
     main()

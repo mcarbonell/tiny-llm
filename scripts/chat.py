@@ -23,7 +23,7 @@ def search_web_tool(query: str) -> str:
     """Implementación de la Herramienta externa simulada.
     En una versión de producción aquí inyectaríamos la API de Brave / Google / Wikipedia.
     """
-    print(f"\n[🤖 TOOLCALL] Buscando en internet: '{query}'...", end="")
+    print(f"\n[TOOLCALL] Buscando en internet: '{query}'...", end="")
     try:
         # Mock de ejecución para validar el flujo
         import time
@@ -86,7 +86,7 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
         if token_id == tool_call_id:
             in_tool_call = True
             current_tool_query = [] # Limpiamos buffer
-            print("\n[⚡ DETECTADA INVOCACIÓN A HERRAMIENTA...]", end="", flush=True)
+            print("\n[DETECTADA INVOCACIÓN A HERRAMIENTA...]", end="", flush=True)
             continue
             
         if in_tool_call:
@@ -100,7 +100,7 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
                 result = search_web_tool(query_str)
                 
                 # Inyectar resultado de vuelta a la mente de la red neuronal
-                print(f"[🔍 INYECCIÓN AL CONTEXTO] <TOOL_RESULT> {result} </TOOL_RESULT>")
+                print(f"[INYECCIÓN AL CONTEXTO] <TOOL_RESULT> {result} </TOOL_RESULT>")
                 tool_result_text = f" <TOOL_RESULT> {result} </TOOL_RESULT> "
                 result_ids = tokenizer.encode(tool_result_text).ids
                 
@@ -121,14 +121,14 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
 
 def main():
     if not os.path.exists(CKPT_PATH):
-        print(f"❌ Error: No se encontró checkpoint en {CKPT_PATH}")
+        print(f"Error: No se encontró checkpoint en {CKPT_PATH}")
         print("Asegúrate de que el script train.py está guardando los pesos correctamente.")
         sys.exit(1)
         
-    print("🛠️ Cargando Tokenizador...")
+    print("Cargando Tokenizador...")
     tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
     
-    print("🧠 Despertando a TinyThinker desde el disco...")
+    print("Despertando a TinyThinker desde el disco...")
     checkpoint = torch.load(CKPT_PATH, map_location=DEVICE, weights_only=False)
     args = checkpoint['args']
     
@@ -143,10 +143,10 @@ def main():
         loss_val = f"{loss_val:.4f}"
     
     print(f"\n=============================================")
-    print(f"✅ ¡Modelo Activo usando acelerador {DEVICE.upper()}!")
-    print(f"📊 Entrenamiento base -> Iteración: {iter_n} | Pérdida: {loss_val}")
+    print(f"¡Modelo Activo usando acelerador {DEVICE.upper()}!")
+    print(f"Entrenamiento base -> Iteración: {iter_n} | Pérdida: {loss_val}")
     print("=============================================")
-    print("📝 Escribe tu mensaje ('exit' o 'quit' para salir).")
+    print("Escribe tu mensaje ('exit' o 'quit' para salir).")
     
     while True:
         try:
