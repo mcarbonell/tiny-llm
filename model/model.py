@@ -233,8 +233,9 @@ class TinyThinker(nn.Module):
         # Máscara causal para entrenamiento autorregresivo
         mask = None
         if seqlen > 1 and past_key_values is None:
-            mask = torch.full((seqlen, seqlen), float('-inf'), device=tokens.device)
-            mask = torch.triu(mask, diagonal=1)
+            mask = torch.zeros(seqlen, seqlen, device=tokens.device)
+            bool_mask = torch.tril(torch.ones(seqlen, seqlen, device=tokens.device, dtype=torch.bool), diagonal=0).logical_not()
+            mask = mask.masked_fill(bool_mask, float('-inf'))
 
         past_key_values_out = []
         for i, layer in enumerate(self.layers):
