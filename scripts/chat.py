@@ -7,6 +7,10 @@ import torch
 import torch.nn.functional as F
 from tokenizers import Tokenizer
 
+logger = logging.getLogger(__name__)
+
+logger = logging.getLogger(__name__)
+
 # Añadir ruta base para resolver import del modelo
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from model.model import TinyThinker, ModelArgs
@@ -143,7 +147,7 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
                 if token_id == tool_call_end_id:
                     in_tool_call = False
                     # Reconstruir query
-                    query_str = re.sub(r'(?<=\w)\s(?=\w)', '', re.sub(r'\s+', ' ', tokenizer.decode(current_tool_query)).strip())
+                    query_str = tokenizer.decode(current_tool_query, skip_special_tokens=True).strip()
 
                     # Ejecutar herramienta
                     result = search_web_tool(query_str)
@@ -167,7 +171,7 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
                     current_tool_query.append(token_id)
             else:
                 # -------- FLUJO TEXTUAL NORMAL --------
-                new_text = tokenizer.decode([token_id])
+                new_text = tokenizer.decode([token_id], skip_special_tokens=True)
                 print(new_text, end="", flush=True)
 
     print("\n")

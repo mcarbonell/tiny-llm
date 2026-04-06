@@ -3,28 +3,30 @@ from datasets import load_dataset
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.trainers import BpeTrainer
-from tokenizers.pre_tokenizers import Whitespace
+from tokenizers.pre_tokenizers import ByteLevel
+from tokenizers.decoders import ByteLevel as ByteLevelDecoder
 
-# Configuración
+# ConfiguraciÃ³n
 DATASET_NAME = "roneneldan/TinyStories"
-VOCAB_SIZE = 16384 # Vocabulario pequeño para modelo ligero
+VOCAB_SIZE = 16384 # Vocabulario pequeÃ±o para modelo ligero
 TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json")
 
 def main():
     print("Cargando el dataset TinyStories...")
-    # Cargamos solo la partición de train para entrenar el tokenizador.
+    # Cargamos solo la particiÃ³n de train para entrenar el tokenizador.
     # El dataset completo tiene historias cortas generadas (~500M tokens en total),
-    # usaremos un subconjunto (ej. el streaming o el primer 10-20%) para ser rápidos.
-    # De un vistazo, cargar todo en memoria puede tardar un poco, así que lo manejaremos como un generador.
+    # usaremos un subconjunto (ej. el streaming o el primer 10-20%) para ser rÃ¡pidos.
+    # De un vistazo, cargar todo en memoria puede tardar un poco, asÃ­ que lo manejaremos como un generador.
     dataset = load_dataset(DATASET_NAME, split='train', streaming=True)
 
     # Entrenar un Tokenizador BPE desde cero
     print("Inicializando Tokenizador BPE...")
     tokenizer = Tokenizer(BPE(unk_token="<unk>"))
-    tokenizer.pre_tokenizer = Whitespace()
+    tokenizer.pre_tokenizer = ByteLevel()
+    tokenizer.decoder = ByteLevelDecoder()
 
     # Definir tokens especiales
-    special_tokens = ["<unk>", "<bos>", "<eos>", "<pad>", "<TOOL_CALL>", "</TOOL_CALL>", "<TOOL_RESULT>", "</TOOL_RESULT>", "<THINK>", "</THINK>"]
+    special_tokens = ["<unk>", "<bos>", "<eos>", "<pad>", "<TOOL_CALL>", "</TOOL_CALL>", "<TOOL_RESULT>", "</TOOL_RESULT>", "<THINK>", "</THINK>", "[SYSTEM]", "[/SYSTEM]"]
 
     trainer = BpeTrainer(
         vocab_size=VOCAB_SIZE,
