@@ -171,25 +171,22 @@ class TransformerBlock(nn.Module):
         self.use_checkpoint = False  # Toggle para gradient checkpointing
 
     def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: torch.Tensor, past_key_value=None):
+        # [FIX BUG-A] Llamada única a attention — capturamos (output, new_kv) de una vez.
+        # Esto evita el doble cómputo que existía cuando past_key_value is not None.
+        attn_out, new_kv = self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)
+
         if self.use_checkpoint and self.training:
-            # Usar checkpointing para ahorrar memoria
-            def attention_forward(x):
-                return self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)[0]
-            h = torch.utils.checkpoint.checkpoint(attention_forward, x)
-        else:
-            h = x + self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)[0]
-        
-        if self.use_checkpoint and self.training:
+            # [FIX BUG-E] La residual connection ahora se aplica también en la rama de checkpointing.
+            h = x + attn_out
             def ffn_forward(h):
                 return self.feed_forward(self.ffn_norm(h))
             out = h + torch.utils.checkpoint.checkpoint(ffn_forward, h)
         else:
+            h = x + attn_out
             out = h + self.feed_forward(self.ffn_norm(h))
-        
+
         if past_key_value is not None:
-            return out, self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)[1]
-        if past_key_value is not None:
-            return out, self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)[1]
+            return out, new_kv
         return out
 
 class TinyThinker(nn.Module):
@@ -235,12 +232,7 @@ class TinyThinker(nn.Module):
             
         h = self.norm(h)
         logits = self.output(h)
-        if use_cache:
-            return logits, past_key_values_out
-        return logits
-            
-        h = self.norm(h)
-        logits = self.output(h)
+        # [FIX BUG-B] Eliminado el dead code duplicado que era inalcanzable.
         if use_cache:
             return logits, past_key_values_out
         return logits

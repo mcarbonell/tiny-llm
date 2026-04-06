@@ -26,6 +26,11 @@ warmup_iters = 200
 eval_interval = 250
 eval_iters = 20
 
+# [FIX BUG-C] out_dir definido en scope global ANTES del logging.basicConfig().
+# Antes, el FileHandler fallaba con NameError porque out_dir no existía aún.
+out_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+os.makedirs(out_dir, exist_ok=True)
+
 # Configurar logging
 logging.basicConfig(
     level=logging.INFO,

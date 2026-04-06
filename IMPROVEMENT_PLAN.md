@@ -6,12 +6,40 @@
 
 ## 🔴 P0 — Críticos (Corregir ya)
 
+> ⚠️ **Bugs encontrados en auditoría de código (2026-04-06)**
+
+### BUG-A. Double attention call en `TransformerBlock.forward()` [🔴 CRÍTICO]
+- **Problema:** Cuando `past_key_value is not None`, `self.attention()` se llamaba **dos veces**: una para obtener la salida `h` y otra para obtener el nuevo KV. Doble cómputo desperdiciado + estados KV inconsistentes.
+- **Estado:** ✅ Completado - `attn_out, new_kv` capturados de una sola llamada.
+- **Archivos:** `model/model.py` (`TransformerBlock.forward`)
+
+### BUG-B. Dead code inalcanzable en `TinyThinker.forward()` [🔴 CRÍTICO]
+- **Problema:** Líneas finales de `forward()` eran código muerto: el `return logits` anterior impeda llegar al bloque duplicado.
+- **Estado:** ✅ Completado - Bloque duplicado eliminado.
+- **Archivos:** `model/model.py` (`TinyThinker.forward`)
+
+### BUG-C. `out_dir` no definido en scope global de `train.py` [🔴 CRÍTICO]
+- **Problema:** `logging.basicConfig()` referenciaba `out_dir` antes de que existiera en ningún scope. Causaba `NameError` al ejecutar el script.
+- **Estado:** ✅ Completado - `out_dir` definido en scope global antes del `basicConfig()`.
+- **Archivos:** `scripts/train.py`
+
+### BUG-D. KV-cache no usado en `chat.py` [🟡 IMPORTANTE]
+- **Problema:** `generate_interactive()` hacía un forward completo sobre toda la secuencia en cada paso (O(n²)).
+- **Estado:** ✅ Completado - `generate_interactive()` reescrita con KV-cache: prefijo procesado una vez, luego un token por paso. También añadido logging estructurado a `search_web_tool` y `logging.basicConfig()` en `main()`.
+- **Archivos:** `scripts/chat.py`
+
+### BUG-E. Residual connection faltante en gradient checkpointing [🟡 IMPORTANTE]
+- **Problema:** Cuando `use_checkpoint=True`, la conexión residual `h = x + h` no se aplicó en la rama de checkpointing.
+- **Estado:** ✅ Completado - La residual connection `h = x + attn_out` ahora se aplica en ambas ramas (checkpoint y normal). El código de gradient checkpointing se simplificó eliminando el bloque duplicado.
+- **Archivos:** `model/model.py` (`TransformerBlock.forward`)
+
+
 ### 1. Fix checkpoint name mismatch (`chat.py`)
 - **Estado:** ✅ Completado - `chat.py` usa `resolve_checkpoint` que prioriza `ckpt_finetuned.pt`.
 - **Archivos:** `scripts/chat.py`, `scripts/finetune.py`
 
 ### 2. Pin dependency versions
-- **Estado:** ✅ Parcialmente completado - `requirements.txt` tiene versiones mínimas. Recomendado: usar versiones exactas con `pip freeze`.
+- **Estado:** ⏳ Pendiente - `requirements.txt` usa versiones mínimas. Necesario: versiones exactas con `pip freeze`.
 - **Archivos:** `requirements.txt`
 
 ### 3. Add `.env.example` template
@@ -39,104 +67,96 @@
 - **Archivos:** `scripts/chat.py`
 
 ### 9. Expand test suite
-- **Estado:** ✅ Completado - Agregados tests para RoPE, GQA, tokenizer, data loading, KV-cache.
+- **Estado:** ✅ Completado - Agregadas tests para RoPE, GQA, tokenizer, data loading, KV-cache.
 - **Archivos:** `tests/test_model.py`
 
 ### 10. Add gradient checkpointing (optional toggle)
-- **Estado:** ✅ Completado - Toggle use_checkpoint en TransformerBlock para ahorro de memoria.
-- **Archivos:** `model/model.py`
+- **Estado:** ⏳ Pendiente - Toggle existe pero no hay CLI flag para activarlo.
+- **Archivos:** `model/model.py`, `scripts/config.py`, `scripts/train.py`
 
 ### 11. Add logging framework
 - **Estado:** ✅ Completado - Logging con archivos en train.py y finetune.py.
 - **Archivos:** `scripts/train.py`, `scripts/finetune.py`
 
+### 12. Fix code duplication in `model.py`
+- **Estado:** ⏳ Pendiente - Cubierto por BUG-A y BUG-B arriba. Los bugs son consecuencia directa de esta duplicación.
+- **Archivos:** `model/model.py`
+
+### 13. Add input validation in `eval.py`
+- **Estado:** ⏳ Pendiente - No valida estructura de dataset antes de procesar.
+- **Archivos:** `scripts/eval.py`
+
+### 14. Add error logging in `chat.py`
+- **Estado:** ✅ Completado - Cubierto por BUG-D: logging INFO/WARNING/ERROR en `search_web_tool` y `basicConfig()` en `main()`.
+- **Archivos:** `scripts/chat.py`
+
 ---
 
 ## 🟡 P1 — Importantes (Mejoras de arquitectura)
 
-### 4. Implement KV-Cache para inferencia
-- **Estado:** ✅ Completado - `model/model.py` y `scripts/chat.py` usan `past_key_values` para inferencia incremental.
-- **Problema:** En `chat.py`, cada token generado re-evalúa TODA la secuencia (`model(x_cond)`). Complejidad O(n²) por token.
-- **Solución:** Añadir `past_key_values` cache en `Attention` y `TransformerBlock`. Forward pasa a ser O(1) por token tras el prompt inicial.
-- **Impacto:** 5-10x más rápido en generación.
-- **Archivos:** `model/model.py`, `scripts/chat.py`
-
-### 5. Externalize configuration (argparse + YAML)
-- **Estado:** ✅ Completado - `scripts/config.py` expone hiperparámetros y `scripts/finetune.py` usa argumentos CLI.
-- **Problema:** Hiperparámetros hardcodeados en `train.py` y `finetune.py`.
-- **Solución:** Crear `scripts/config.py` con dataclass + argparse CLI. Soportar `--config config.yaml`.
+### 1. YAML config support
+- **Estado:** ⏳ Pendiente - `scripts/config.py` soporta argparse pero no YAML.
+- **Solución:** Agregar `--config config.yaml` que cargue parámetros desde archivo YAML.
 - **Archivos:** `scripts/config.py`, `scripts/train.py`, `scripts/finetune.py`
 
-### 6. Real tool integration (DuckDuckGo / Wikipedia)
-- **Estado:** ✅ Completado - `scripts/chat.py` hace búsquedas reales a DuckDuckGo.
-- **Problema:** `search_web_tool` en `chat.py` es un mock con `time.sleep(1)`.
-- **Solución:** Implementar búsqueda real con `duckduckgo-search` o Wikipedia API. Fallback a mock si no hay conexión.
-- **Archivos:** `scripts/chat.py`, `requirements.txt`
+### 2. Integration tests
+- **Estado:** ⏳ Pendiente - Tests unitarios existen, falta end-to-end.
+- **Solución:** Agregar tests de integración que validen pipeline completo.
+- **Archivos:** `tests/test_integration.py`
 
 ---
 
 ## 🟢 P2 — Calidad de código
 
-### 7. Expand test suite
+### 1. Expand test suite
 - **Estado:** ✅ Completado - Tests ampliados incluyendo RoPE, GQA, tokenizer, data loading, KV-cache y LoRA.
-- **Problema:** Solo 1 test (`test_model_forward`).
-- **Solución:** Añadir tests para:
-  - `test_rotary_embeddings` — verificar periodicidad RoPE
-  - `test_gqa_shapes` — confirmar que GQA reduce heads correctamente
-  - `test_tokenizer_roundtrip` — encode → decode = original
-  - `test_data_loading` — get_batch devuelve shapes correctos
-  - `test_kv_cache` — (tras P1-4) output con cache == output sin cache
-  - `test_lora_adapter` — verificar adaptadores LoRA y parámetros entrenables
-- **Archivos:** `tests/test_model.py`, `tests/test_tokenizer.py`, `tests/test_data.py`
+- **Archivos:** `tests/test_model.py`
 
-### 8. Add gradient checkpointing (optional toggle)
-- **Estado:** ✅ Completado - `TransformerBlock` soporta checkpointing opcional.
-- **Problema:** Al escalar a 100M+ parámetros, la memoria será bottleneck.
-- **Solución:** `torch.utils.checkpoint` en `TransformerBlock.forward` con flag `use_gradient_checkpointing`.
-- **Archivos:** `model/model.py`, `scripts/config.py`
+### 2. Gradient checkpointing CLI flag
+- **Estado:** ⏳ Pendiente - Agregar `--use_gradient_checkpointing` a CLI.
+- **Archivos:** `scripts/config.py`, `scripts/train.py`
 
-### 9. Add logging framework
-- **Estado:** ✅ Completado - `logging` agregado en `scripts/train.py` y `scripts/finetune.py`.
-- **Problema:** Logs solo por `print()` + archivo plano.
-- **Solución:** Usar `logging` module de Python con niveles (INFO/DEBUG/WARNING). Opcional: soporte para Weights & Biases.
-- **Archivos:** `scripts/train.py`, `scripts/finetune.py`
+### 3. Logging en tool-calling
+- **Estado:** ⏳ Pendiente - Agregar logging a `search_web_tool` con niveles INFO/WARNING/ERROR.
+- **Archivos:** `scripts/chat.py`
 
 ---
 
 ## 🔵 P3 — Nice to have (Futuro)
 
-### 10. Sliding window attention / ALiBi
+### 1. Sliding window attention / ALiBi
 - Permitir extrapolación más allá de `max_seq_len` sin degradación.
 
-### 11. LoRA support
-- **Estado:** ✅ Implementado - `model/model.py` añade adaptadores LoRA, `scripts/finetune.py` acepta `--lora_r`, `--lora_alpha`, `--lora_dropout`.
-- Fine-tuning eficiente sin modificar pesos base. Ideal para experimentar con múltiples datasets.
-
-### 12. Multi-GPU / DDP support
+### 2. Multi-GPU / DDP support
 - `torch.distributed` para escalar entrenamiento a varias GPUs.
 
-### 13. Evaluation harness
-- Script `scripts/eval.py` que mida perplexity en held-out data + benchmarks simples (truthful_qa, etc).
-
-### 14. Docker support
+### 3. Docker support
 - `Dockerfile` + `docker-compose.yml` para reproducibilidad total.
+
+### 4. Weights & Biases integration
+- Soporte opcional para W&B logging en `scripts/train.py`.
 
 ---
 
 ## 📅 Orden de ejecución recomendado
 
 ```
-1. Fix checkpoint naming     → 15 min
-2. Pin dependencies          → 5 min
-3. Add .env.example          → 5 min
-4. KV-Cache inference        → 1-2 hrs
-5. Config externalization    → 1 hr
-6. Real tool integration     → 1 hr
-7. Expand tests              → 2 hrs
-8. Gradient checkpointing    → 1 hr
-9. Logging framework         → 1 hr
+# Sprint 1 — Bugs críticos (< 1h)
+1. BUG-A: Fix double attention call (model.py)           → 10 min
+2. BUG-B: Remove dead code (model.py)                   → 5 min
+3. BUG-C: Fix out_dir scope in train.py                 → 5 min
+4. BUG-D: Migrate KV-cache to chat.py                   → 20 min
+5. BUG-E: Fix residual connection in grad-ckpt          → 10 min
+
+# Sprint 2 — Mejoras de calidad (< 2h)
+6. Add gradient checkpointing CLI flag                   → 15 min
+7. Add error logging in search_web_tool (chat.py)        → 15 min
+8. Add input validation (eval.py)                        → 20 min
+9. Pin dependencies (pip freeze)                         → 5 min
+10. YAML config support                                  → 30 min
+11. Integration tests                                    → 1 hr
 ```
 
 ---
 
-*Última actualización: 2026-04-06*
+*Última actualización: 2026-04-06 (auditoría de código — 5 bugs nuevos añadidos)*

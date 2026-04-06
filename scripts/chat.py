@@ -2,6 +2,7 @@ import os
 import sys
 import re
 import argparse
+import logging
 import torch
 import torch.nn.functional as F
 from tokenizers import Tokenizer
@@ -19,6 +20,9 @@ if getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
 
 CHECKPOINTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "checkpoints")
 TOKENIZER_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model", "tokenizer.json")
+
+# Logger de módulo (se configura en main())
+logger = logging.getLogger(__name__)
 
 def resolve_checkpoint(checkpoint_arg=None):
     if checkpoint_arg and os.path.exists(checkpoint_arg):
@@ -45,98 +49,110 @@ def search_web_tool(query: str) -> str:
         if results:
             result_text = "\n".join([f"- {r['title']}: {r['body']}" for r in results])
             print(" ¡Hecho!")
+            logger.info(f"[search_web_tool] OK | query='{query}' | {len(results)} resultados")
             return result_text
         else:
             print(" No results.")
+            logger.warning(f"[search_web_tool] Sin resultados | query='{query}'")
             return "No se encontraron resultados relevantes."
     except Exception as e:
         print(f" Error: {e}. Usando fallback.")
+        logger.error(f"[search_web_tool] ERROR | query='{query}' | {type(e).__name__}: {e}")
         return f"Simulated search result for '{query}': This is a placeholder. Install duckduckgo-search for real results."
 
 def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperature=0.7, top_k=40):
+    """Genera texto con KV-cache para inferecia eficiente.
+    [FIX BUG-D] Ahora usa past_key_values en lugar de recomputar toda la secuencia
+    en cada paso. El prefijo se procesa una única vez (O(n)) y luego se genera
+    token a token con los KV acumulados en O(1) por paso de atención.
+    """
     model.eval()
-    
+
     # 1. Preparar IDs iniciales
     input_ids = tokenizer.encode(prompt).ids
     x = torch.tensor([input_ids], dtype=torch.long, device=DEVICE)
-    
-    # 2. Identificadores de tokens especiales a cachear
+
+    # 2. Identificadores de tokens especiales
     eos_id = tokenizer.token_to_id("<eos>") or tokenizer.token_to_id("<pad>")
     tool_call_id = tokenizer.token_to_id("<TOOL_CALL>")
     tool_call_end_id = tokenizer.token_to_id("</TOOL_CALL>")
 
-    generated_tokens = []
     in_tool_call = False
     current_tool_query = []
-    previous_printed_text = ""
-    
+    past_key_values = None
+
     print("\nTinyThinker> ", end="", flush=True)
 
-    for _ in range(max_new_tokens):
-        # Acortar contexto para que quepa en la ventana del modelo local
-        if x.size(1) > model.args.max_seq_len:
-            x_cond = x[:, -model.args.max_seq_len:]
-        else:
-            x_cond = x
-            
-        with torch.no_grad():
-            logits = model(x_cond)
-            
-        # Tomar los logits del último token predicho
-        logits = logits[:, -1, :] / temperature
-        
-        # Filtro Top-K (elimina opciones extrañas)
-        if top_k is not None:
-            v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-            logits[logits < v[:, [-1]]] = -float('Inf')
-            
-        probs = F.softmax(logits, dim=-1)
-        next_token = torch.multinomial(probs, num_samples=1)
-        
-        # Acumulación de contexto
-        x = torch.cat((x, next_token), dim=1)
-        token_id = next_token.item()
-        
-        # Salida prematura?
-        if token_id == eos_id:
-            break
-            
-        # -------- LOGICA DE HERRAMIENTAS (TOOL INTERCEPTION) --------
-        if token_id == tool_call_id:
-            in_tool_call = True
-            current_tool_query = [] # Limpiamos buffer
-            print("\n[DETECTADA INVOCACIÓN A HERRAMIENTA...]", end="", flush=True)
-            continue
-            
-        if in_tool_call:
-            if token_id == tool_call_end_id:
-                in_tool_call = False
-                # Reconstruir query
-                query_str = re.sub(r'(?<=\w)\s(?=\w)', '', re.sub(r'\s+', ' ', tokenizer.decode(current_tool_query)).strip())
-                
-                # Ejecutar herramienta (El motor sale de PyTorch y vuelve a Python estándar)
-                result = search_web_tool(query_str)
-                
-                # Inyectar resultado de vuelta a la mente de la red neuronal
-                print(f"[INYECCIÓN AL CONTEXTO] <TOOL_RESULT> {result} </TOOL_RESULT>")
-                tool_result_text = f" <TOOL_RESULT> {result} </TOOL_RESULT> "
-                result_ids = tokenizer.encode(tool_result_text).ids
-                
-                # Anexar sin predecir
-                x = torch.cat((x, torch.tensor([result_ids], device=DEVICE)), dim=1)
-                
-                print("\nTinyThinker> ", end="", flush=True)
-                previous_printed_text = "" # Resetear el buffer de impresión
-                generated_tokens = []      # Resetear buffer de tokens
+    with torch.no_grad():
+        for step in range(max_new_tokens):
+            # --- Primer paso: procesar prefijo completo ---
+            # --- Pasos sucesivos: pasar solo el último token con KV-cache ---
+            if step == 0:
+                # Acortar contexto si es necesario
+                x_cond = x[:, -model.args.max_seq_len:] if x.size(1) > model.args.max_seq_len else x
+                logits, past_key_values = model(x_cond, use_cache=True)
             else:
-                # Mientras genere la query, guardamos los IDs
-                current_tool_query.append(token_id)
-        else:
-            # -------- FLUJO TEXTUAL NORMAL --------
-            # Decodificar el token individual para evitar problemas de concatenación
-            new_text = tokenizer.decode([token_id])
-            print(new_text, end="", flush=True)
-            
+                # Solo el último token generado: (1, 1)
+                last_token = x[:, -1:]
+                logits, past_key_values = model(last_token, past_key_values=past_key_values, use_cache=True)
+
+            # Logits del último paso
+            logits = logits[:, -1, :] / temperature
+
+            # Filtro Top-K
+            if top_k is not None:
+                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                logits[logits < v[:, [-1]]] = -float('Inf')
+
+            probs = F.softmax(logits, dim=-1)
+            next_token = torch.multinomial(probs, num_samples=1)
+
+            # Añadir al contexto acumulado
+            x = torch.cat((x, next_token), dim=1)
+            token_id = next_token.item()
+
+            # Salida prematura
+            if token_id == eos_id:
+                break
+
+            # -------- LÓGICA DE HERRAMIENTAS (TOOL INTERCEPTION) --------
+            if token_id == tool_call_id:
+                in_tool_call = True
+                current_tool_query = []
+                print("\n[DETECTADA INVOCACIÓN A HERRAMIENTA...]", end="", flush=True)
+                continue
+
+            if in_tool_call:
+                if token_id == tool_call_end_id:
+                    in_tool_call = False
+                    # Reconstruir query
+                    query_str = re.sub(r'(?<=\w)\s(?=\w)', '', re.sub(r'\s+', ' ', tokenizer.decode(current_tool_query)).strip())
+
+                    # Ejecutar herramienta
+                    result = search_web_tool(query_str)
+
+                    # Inyectar resultado al contexto
+                    print(f"[INYECCIÓN AL CONTEXTO] <TOOL_RESULT> {result} </TOOL_RESULT>")
+                    tool_result_text = f" <TOOL_RESULT> {result} </TOOL_RESULT> "
+                    result_ids = tokenizer.encode(tool_result_text).ids
+                    result_tensor = torch.tensor([result_ids], dtype=torch.long, device=DEVICE)
+
+                    # Añadir tokens del resultado al contexto
+                    x = torch.cat((x, result_tensor), dim=1)
+
+                    # Resetear KV-cache para incluir el resultado inyectado
+                    # Hay que re-codificar toda la secuencia actualizada
+                    x_cond = x[:, -model.args.max_seq_len:] if x.size(1) > model.args.max_seq_len else x
+                    logits, past_key_values = model(x_cond, use_cache=True)
+
+                    print("\nTinyThinker> ", end="", flush=True)
+                else:
+                    current_tool_query.append(token_id)
+            else:
+                # -------- FLUJO TEXTUAL NORMAL --------
+                new_text = tokenizer.decode([token_id])
+                print(new_text, end="", flush=True)
+
     print("\n")
 
 def main():
@@ -146,6 +162,18 @@ def main():
     parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature")
     parser.add_argument("--top-k", type=int, default=40, help="Top-k filtering")
     args = parser.parse_args()
+
+    # Configurar logging con FileHandler para registrar eventos del chat
+    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(os.path.join(log_dir, "chat.log"), encoding="utf-8"),
+            logging.StreamHandler(),
+        ]
+    )
 
     ckpt_path = resolve_checkpoint(args.checkpoint)
     if ckpt_path is None:
