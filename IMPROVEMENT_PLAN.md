@@ -55,17 +55,20 @@
 ## 🟡 P1 — Importantes (Mejoras de arquitectura)
 
 ### 4. Implement KV-Cache para inferencia
+- **Estado:** ✅ Completado - `model/model.py` y `scripts/chat.py` usan `past_key_values` para inferencia incremental.
 - **Problema:** En `chat.py`, cada token generado re-evalúa TODA la secuencia (`model(x_cond)`). Complejidad O(n²) por token.
 - **Solución:** Añadir `past_key_values` cache en `Attention` y `TransformerBlock`. Forward pasa a ser O(1) por token tras el prompt inicial.
 - **Impacto:** 5-10x más rápido en generación.
 - **Archivos:** `model/model.py`, `scripts/chat.py`
 
 ### 5. Externalize configuration (argparse + YAML)
+- **Estado:** ✅ Completado - `scripts/config.py` expone hiperparámetros y `scripts/finetune.py` usa argumentos CLI.
 - **Problema:** Hiperparámetros hardcodeados en `train.py` y `finetune.py`.
 - **Solución:** Crear `scripts/config.py` con dataclass + argparse CLI. Soportar `--config config.yaml`.
 - **Archivos:** `scripts/config.py`, `scripts/train.py`, `scripts/finetune.py`
 
 ### 6. Real tool integration (DuckDuckGo / Wikipedia)
+- **Estado:** ✅ Completado - `scripts/chat.py` hace búsquedas reales a DuckDuckGo.
 - **Problema:** `search_web_tool` en `chat.py` es un mock con `time.sleep(1)`.
 - **Solución:** Implementar búsqueda real con `duckduckgo-search` o Wikipedia API. Fallback a mock si no hay conexión.
 - **Archivos:** `scripts/chat.py`, `requirements.txt`
@@ -75,6 +78,7 @@
 ## 🟢 P2 — Calidad de código
 
 ### 7. Expand test suite
+- **Estado:** ✅ Completado - Tests ampliados incluyendo RoPE, GQA, tokenizer, data loading, KV-cache y LoRA.
 - **Problema:** Solo 1 test (`test_model_forward`).
 - **Solución:** Añadir tests para:
   - `test_rotary_embeddings` — verificar periodicidad RoPE
@@ -82,14 +86,17 @@
   - `test_tokenizer_roundtrip` — encode → decode = original
   - `test_data_loading` — get_batch devuelve shapes correctos
   - `test_kv_cache` — (tras P1-4) output con cache == output sin cache
+  - `test_lora_adapter` — verificar adaptadores LoRA y parámetros entrenables
 - **Archivos:** `tests/test_model.py`, `tests/test_tokenizer.py`, `tests/test_data.py`
 
 ### 8. Add gradient checkpointing (optional toggle)
+- **Estado:** ✅ Completado - `TransformerBlock` soporta checkpointing opcional.
 - **Problema:** Al escalar a 100M+ parámetros, la memoria será bottleneck.
 - **Solución:** `torch.utils.checkpoint` en `TransformerBlock.forward` con flag `use_gradient_checkpointing`.
 - **Archivos:** `model/model.py`, `scripts/config.py`
 
 ### 9. Add logging framework
+- **Estado:** ✅ Completado - `logging` agregado en `scripts/train.py` y `scripts/finetune.py`.
 - **Problema:** Logs solo por `print()` + archivo plano.
 - **Solución:** Usar `logging` module de Python con niveles (INFO/DEBUG/WARNING). Opcional: soporte para Weights & Biases.
 - **Archivos:** `scripts/train.py`, `scripts/finetune.py`
@@ -102,6 +109,7 @@
 - Permitir extrapolación más allá de `max_seq_len` sin degradación.
 
 ### 11. LoRA support
+- **Estado:** ✅ Implementado - `model/model.py` añade adaptadores LoRA, `scripts/finetune.py` acepta `--lora_r`, `--lora_alpha`, `--lora_dropout`.
 - Fine-tuning eficiente sin modificar pesos base. Ideal para experimentar con múltiples datasets.
 
 ### 12. Multi-GPU / DDP support
