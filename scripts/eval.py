@@ -130,7 +130,8 @@ def generate_text(model, tokenizer, input_ids, max_new_tokens=50, temperature=1.
                 v, _ = torch.topk(next_token_logits, min(top_k, next_token_logits.size(-1)))
                 next_token_logits[next_token_logits < v[:, [-1]]] = -float('Inf')
             
-            next_token = torch.multinomial(F.softmax(next_token_logits, dim=-1), 1).item()
+            probs_cpu = F.softmax(next_token_logits, dim=-1).cpu()
+            next_token = torch.multinomial(probs_cpu, 1).to(device).item()
             generated_tokens.append(next_token)
     
     return torch.tensor(generated_tokens, dtype=torch.long).unsqueeze(0)  # Devolver (1, seq)

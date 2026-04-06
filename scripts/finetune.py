@@ -25,18 +25,37 @@ grad_clip = 1.0
 grad_accum_steps = 4
 
 # Ajuste automático del dispositivo (igual que tu mejora en train.py)
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-if getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
-    device = 'mps'
+device = 'cpu'
+try:
+    import torch_directml
+    device = torch_directml.device()   # Equivalente a 'dml:0'
+    print(f"[device] DirectML activo: {device}")
+except ImportError:
+    if torch.cuda.is_available():
+        device = 'cuda'
+    elif getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
+        device = 'mps'
+    print(f"[device] DirectML no disponible, usando: {device}")
 
-if device == 'cuda':
+# Detectar si DirectML está activo
+_is_dml = str(device).startswith('dml') if not isinstance(device, str) else False
+
+if _is_dml:
+    # DirectML no soporta autocast — usar fp32 puro
+    import contextlib
+    ctx = contextlib.nullcontext()
+    ptdtype = torch.float32
+elif device == 'cuda':
     ptdtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    ctx = torch.amp.autocast(device_type='cuda', dtype=ptdtype)
 elif device == 'cpu':
     ptdtype = torch.bfloat16  # AVX-512 BF16 nativo en Zen 4
+    ctx = torch.amp.autocast(device_type='cpu', dtype=ptdtype)
 else:
     ptdtype = torch.float32
+    import contextlib
+    ctx = contextlib.nullcontext()
 
-ctx = torch.amp.autocast(device_type=device if device != 'mps' else 'cpu', dtype=ptdtype)
 scaler = torch.cuda.amp.GradScaler(enabled=(ptdtype == torch.float16 and device == 'cuda'))
 
 # ==========================================

@@ -46,10 +46,16 @@ logger = logging.getLogger(__name__)
 # Configuración Inicial y Hardware
 # ----------------------------------
 device = 'cpu'
-if torch.cuda.is_available():
-    device = 'cuda'
-elif getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
-    device = 'mps'
+try:
+    import torch_directml
+    device = torch_directml.device()   # Equivalente a 'dml:0'
+    print(f"[device] DirectML activo: {device}")
+except ImportError:
+    if torch.cuda.is_available():
+        device = 'cuda'
+    elif getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
+        device = 'mps'
+    print(f"[device] DirectML no disponible, usando: {device}")
 
 # AMP (Precisión Mixta Automática):
 # BF16 en CPU (AMD 8845HS lo soporta nativamente) da un ~1.5-2x de speedup.
@@ -253,6 +259,10 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
             # Multiplicamos por grad_accum_steps para ver el loss real del batch
             loss_unscaled = loss.item() * grad_accum_steps
             t_print(f"iter {iter_num:4d} | loss {loss_unscaled:.4f} | lr {lr:.2e} | loop {dt*1000:.2f}ms")
+
+if __name__ == "__main__":
+    main()
+ter {iter_num:4d} | loss {loss_unscaled:.4f} | lr {lr:.2e} | loop {dt*1000:.2f}ms")
 
 if __name__ == "__main__":
     main()

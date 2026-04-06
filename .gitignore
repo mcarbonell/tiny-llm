@@ -36,3 +36,5 @@ data/
 # Secrets
 .env
 docs/research/
+
+venv_gpu/

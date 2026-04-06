@@ -374,7 +374,7 @@ Prioridad 1 (impacto inmediato):
   [x] A3. Opcional: Combinado con SimpleWiki (~300M tokens en total).
 
 Prioridad 2 (aceleración):
-  B.  Instalar torch-directml + adaptar bloque de device detection
+  [x] B.  Instalar torch-directml + adaptar bloque de device detection
       (4 archivos: train.py, finetune.py, eval.py, chat.py)
 
 Prioridad 3 (calidad de comportamiento):

@@ -14,9 +14,17 @@ from model.model import TinyThinker, ModelArgs
 # -----------------
 # Configuración
 # -----------------
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-if getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
-    DEVICE = 'mps'
+DEVICE = 'cpu'
+try:
+    import torch_directml
+    DEVICE = torch_directml.device()
+    print(f"[device] DirectML activo: {DEVICE}")
+except ImportError:
+    if torch.cuda.is_available():
+        DEVICE = 'cuda'
+    elif getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
+        DEVICE = 'mps'
+    print(f"[device] DirectML no disponible, usando: {DEVICE}")
 
 CHECKPOINTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "checkpoints")
 TOKENIZER_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model", "tokenizer.json")
