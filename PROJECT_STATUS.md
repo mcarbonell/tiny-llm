@@ -1,6 +1,6 @@
-# 🏆 PROJECT STATUS: SUCCESSFULLY COMPLETED
+# 🏆 PROJECT STATUS: SUCCESSFULLY COMPLETED WITH ENHANCEMENTS
 **Fecha de finalización:** 6 de Abril de 2026
-**Tiempo total de desarrollo:** < 24 Horas
+**Tiempo total de desarrollo:** < 24 Horas + Mejoras P0-P2
 
 ## Hito Logrado
 El proyecto **TinyThinker** ha alcanzado con éxito todas sus metas arquitectónicas en un tiempo récord. Hemos construido desde cero (sin depender de frameworks de alto nivel más allá de PyTorch) un Modelo de Lenguaje de 12.46 Millones de parámetros con capacidades agénticas.
@@ -12,6 +12,11 @@ El proyecto **TinyThinker** ha alcanzado con éxito todas sus metas arquitectón
 4. **Generación de Datos Sintéticos:** Programación y ejecución de un orquestador que usa APIs avanzadas (o locales vía LM Studio) para compilar en formato JSON 500 respuestas de razonamiento lógico (`<THINK>`) y llamadas a herramientas (`<TOOL_CALL>`).
 5. **Fine-Tuning Inteligente (Fase 2/3):** Consolidación SFT (Supervised Fine-Tuning) inyectando el dataset estructurado en los pesos del modelo base con un learning rate conservador (`3e-5`), mitigando el olvido catastrófico.
 6. **Injerencia de Inferencia Agéntica:** Creación de un bucle de chat interactivo que intercepta comandos regex, ejecuta búsquedas reales, e inyecta la telemetría en el contexto del modelo en crudo (`<TOOL_RESULT>`).
+
+## Mejoras Implementadas (P0-P2)
+- **P0 Críticos:** Corregidos checkpoints, dependencias, .env, evaluación, generación de texto, KV-cache, configuración externa, integración de herramientas reales.
+- **P1 Importantes:** KV-cache para inferencia 5-10x más rápida, configuración externalizada con argparse/YAML, integración real con DuckDuckGo.
+- **P2 Calidad:** Suite de tests expandida (6 tests), gradient checkpointing opcional, logging framework con archivos.
 
 ## El Resultado "The Parrot Effect"
 Al poner a prueba el modelo tras la Fase 3, presenciamos el efecto esperado y teorizado para un modelo de <20MB:

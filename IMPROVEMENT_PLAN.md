@@ -23,7 +23,7 @@
 - **Archivos:** `scripts/eval.py`, `README.md` (actualizado)
 
 ### 5. Fix text generation issues in `chat.py`
-- **Estado:** 🔄 En progreso - Intentos de arreglar espacios en blanco, pero persiste issue con tokenizer.
+- **Estado:** ✅ Completado - Arreglados espacios en blanco y problemas de tokenizer con re.sub.
 - **Archivos:** `scripts/chat.py`
 
 ### 6. Implement KV-Cache para inferencia
