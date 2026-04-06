@@ -1,6 +1,7 @@
 import os
 import sys
 import re
+import argparse
 import torch
 import torch.nn.functional as F
 from tokenizers import Tokenizer
@@ -16,8 +17,23 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 if getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
     DEVICE = 'mps'
 
-CKPT_PATH = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_finetuned.pt")
-TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json")
+CHECKPOINTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "checkpoints")
+TOKENIZER_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model", "tokenizer.json")
+
+def resolve_checkpoint(checkpoint_arg=None):
+    if checkpoint_arg and os.path.exists(checkpoint_arg):
+        return checkpoint_arg
+    if checkpoint_arg:
+        print(f"Warning: Checkpoint '{checkpoint_arg}' not found, falling back to auto-detect.")
+    priority = ["ckpt_finetuned.pt", "ckpt_best.pt"]
+    for name in priority:
+        path = os.path.join(CHECKPOINTS_DIR, name)
+        if os.path.exists(path):
+            return path
+    candidates = sorted([f for f in os.listdir(CHECKPOINTS_DIR) if f.startswith("ckpt_") and f.endswith(".pt")])
+    if candidates:
+        return os.path.join(CHECKPOINTS_DIR, candidates[-1])
+    return None
 
 def search_web_tool(query: str) -> str:
     """Implementación de la Herramienta externa simulada.
@@ -94,8 +110,7 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
             if token_id == tool_call_end_id:
                 in_tool_call = False
                 # Reconstruir query
-                query_str = tokenizer.decode(current_tool_query)
-                query_str = query_str.strip()
+                query_str = re.sub(r'(?<=\w)\s(?=\w)', '', re.sub(r'\s+', ' ', tokenizer.decode(current_tool_query)).strip())
                 
                 # Ejecutar herramienta (El motor sale de PyTorch y vuelve a Python estándar)
                 result = search_web_tool(query_str)
@@ -116,45 +131,54 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
                 current_tool_query.append(token_id)
         else:
             # -------- FLUJO TEXTUAL NORMAL --------
-            generated_tokens.append(token_id)
-            # Decodificamos TODO lo generado hasta ahora y restamos lo que ya habíamos impreso.
-            # Esto evita que el tokenizador se coma los espacios entre palabras.
-            current_text = tokenizer.decode(generated_tokens)
-            new_text = current_text[len(previous_printed_text):]
+            # Decodificar el token individual para evitar problemas de concatenación
+            new_text = tokenizer.decode([token_id])
             print(new_text, end="", flush=True)
-            previous_printed_text = current_text
             
     print("\n")
 
 def main():
-    if not os.path.exists(CKPT_PATH):
-        print(f"Error: No se encontró checkpoint en {CKPT_PATH}")
-        print("Asegúrate de que el script train.py está guardando los pesos correctamente.")
+    parser = argparse.ArgumentParser(description="Interactive chat with TinyThinker")
+    parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint (auto-detects if not provided)")
+    parser.add_argument("--max-tokens", type=int, default=150, help="Max tokens to generate")
+    parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature")
+    parser.add_argument("--top-k", type=int, default=40, help="Top-k filtering")
+    args = parser.parse_args()
+
+    ckpt_path = resolve_checkpoint(args.checkpoint)
+    if ckpt_path is None:
+        print("Error: No checkpoint found in checkpoints/ directory.")
+        print("Run train.py first, or pass --checkpoint <path>.")
         sys.exit(1)
-        
+
+    if not os.path.exists(TOKENIZER_PATH):
+        print(f"Error: Tokenizer not found at {TOKENIZER_PATH}")
+        print("Run download_and_tokenize.py first.")
+        sys.exit(1)
+
+    print(f"Using checkpoint: {os.path.basename(ckpt_path)}")
     print("Cargando Tokenizador...")
     tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
-    
+
     print("Despertando a TinyThinker desde el disco...")
-    checkpoint = torch.load(CKPT_PATH, map_location=DEVICE, weights_only=False)
-    args = checkpoint['args']
-    
-    model = TinyThinker(args)
-    # Ignorar warning si en el checkpoint no casan perfectos algunos diccionarios optativos
+    checkpoint = torch.load(ckpt_path, map_location=DEVICE, weights_only=False)
+    model_args = checkpoint['args']
+
+    model = TinyThinker(model_args)
     model.load_state_dict(checkpoint['model'], strict=False)
     model.eval()
     model.to(DEVICE)
-    
+
     iter_n, loss_val = checkpoint.get('iter_num', 'N/A'), checkpoint.get('val_loss', 'N/A')
     if isinstance(loss_val, (int, float)):
         loss_val = f"{loss_val:.4f}"
-    
+
     print(f"\n=============================================")
     print(f"¡Modelo Activo usando acelerador {DEVICE.upper()}!")
     print(f"Entrenamiento base -> Iteración: {iter_n} | Pérdida: {loss_val}")
     print("=============================================")
     print("Escribe tu mensaje ('exit' o 'quit' para salir).")
-    
+
     while True:
         try:
             user_input = input("\nUsuario> ")
@@ -162,10 +186,10 @@ def main():
                 continue
             if user_input.strip().lower() in ['exit', 'quit']:
                 break
-                
+
             prompt = f"User: {user_input}\nAssistant: "
-            generate_interactive(model, tokenizer, prompt)
-            
+            generate_interactive(model, tokenizer, prompt, max_new_tokens=args.max_tokens, temperature=args.temperature, top_k=args.top_k)
+
         except KeyboardInterrupt:
             print("\nSaliendo de la terminal...")
             break

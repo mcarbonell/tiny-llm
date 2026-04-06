@@ -9,6 +9,9 @@ venv/
 env/
 .venv/
 
+# Variables de entorno
+.env
+
 # PyTorch y Checkpoints
 *.pt
 *.pth

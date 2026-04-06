@@ -1,5 +1,9 @@
-torch
-datasets
-tokenizers
-transformers
-tqdm
+torch>=2.5.0
+datasets>=3.0.0
+tokenizers>=0.20.0
+transformers>=4.45.0
+tqdm>=4.66.0
+openai>=1.50.0
+python-dotenv>=1.0.0
+duckduckgo-search>=6.3.0
+numpy>=1.26.0

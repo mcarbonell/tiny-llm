@@ -45,6 +45,9 @@ python scripts/train.py
 
 # 5. (Opcional) Inferencia interactiva con tool-calling
 python scripts/chat.py
+
+# 6. Evaluar el modelo (perplexity y accuracy en tool-calling)
+python scripts/eval.py --checkpoint checkpoints/ckpt_finetuned.pt
 ```
 
 ---
