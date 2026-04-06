@@ -199,7 +199,7 @@ def main():
     tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
 
     print("Despertando a TinyThinker desde el disco...")
-    checkpoint = torch.load(ckpt_path, map_location=DEVICE, weights_only=False)
+    checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
     model_args = checkpoint['args']
 
     model = TinyThinker(model_args)
@@ -225,7 +225,8 @@ def main():
             if user_input.strip().lower() in ['exit', 'quit']:
                 break
 
-            prompt = f"User: {user_input}\nAssistant: "
+            SYSTEM_TEXT = "[SYSTEM] You are TinyThinker, a compact AI assistant. You cannot reliably recall specific facts or dates. When asked factual questions, use your search tool. [/SYSTEM]"
+            prompt = f"{SYSTEM_TEXT}\nUser: {user_input}\nAssistant: "
             generate_interactive(model, tokenizer, prompt, max_new_tokens=args.max_tokens, temperature=args.temperature, top_k=args.top_k)
 
         except KeyboardInterrupt:

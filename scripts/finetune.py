@@ -103,9 +103,9 @@ def get_batch(data):
     ix = torch.randint(len(data) - seq_len, (batch_size,))
     x = torch.stack([data[i:i+seq_len] for i in ix])
     y = torch.stack([data[i+1:i+1+seq_len] for i in ix])
-    if device in ('cuda', 'cpu') and torch.cuda.is_available():
+    if device == 'cuda':
         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
-    elif device == 'mps':
+    else:
         x, y = x.to(device), y.to(device)
     return x, y
 
@@ -162,7 +162,7 @@ def main():
     learning_rate = cmd_args.learning_rate
 
     print(f"🧠 Cargando Mente Base Mestra desde: {os.path.basename(BASE_CKPT)}")
-    checkpoint = torch.load(BASE_CKPT, map_location=device, weights_only=False)
+    checkpoint = torch.load(BASE_CKPT, map_location='cpu', weights_only=False)
     args = checkpoint['args']
     args.lora_r = cmd_args.lora_r
     args.lora_alpha = cmd_args.lora_alpha

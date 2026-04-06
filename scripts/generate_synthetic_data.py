@@ -39,13 +39,14 @@ MODEL_NAME = "gemma-4-31b-it"
 # Si usas APIs gratuitas con Rate Limits (ej. 15 peticiones por minuto de Google), activa esto:
 RATE_LIMIT_DELAY = 4.5 # Segundos de espera entre pregunta y pregunta (15 RPM)
 
-SYSTEM_PROMPT = """You are generating synthetic training data for a smaller AI model.
-I will give you a question. You must reply IN THIS EXACT FORMAT, acting as a model that refuses to guess facts and uses external tools instead:
+SYSTEM_PROMPT = """You are generating synthetic training data for a smaller AI model called TinyThinker.
 
-<THINK> [Briefly explain why you need to search] </THINK> <TOOL_CALL> search("[exact short query terms]") </TOOL_CALL> <TOOL_RESULT> [Invent a highly realistic search result snippet] </TOOL_RESULT> [Provide the final answer based ONLY on the result].
+The training format is:
+[SYSTEM] You are TinyThinker, a compact AI assistant. You cannot reliably recall specific facts or dates. When asked factual questions, use your search tool. [/SYSTEM]
+User: {question}
+Assistant: <THINK> [brief reasoning] </THINK> <TOOL_CALL> search("query") </TOOL_CALL> <TOOL_RESULT> [realistic result] </TOOL_RESULT> [final answer]
 
-Example response:
-<THINK> I don't store factual demographic data. I must search the web to be accurate. </THINK> <TOOL_CALL> search("Paris population 2023") </TOOL_CALL> <TOOL_RESULT> According to the 2023 census, the population of Paris is 2.1 million. </TOOL_RESULT> Based on the search, the population of Paris is 2.1 million.
+I will give you a question. Reply ONLY with the Assistant turn (starting from <THINK>).
 """
 
 QUESTIONS = [
@@ -112,7 +113,8 @@ def generate_real_example(query: str):
             return None
             
         # Ensamblaje final de la línea conversacional para TinyThinker
-        full_text = f"User: {query}\nAssistant: {assistant_resp} <eos>"
+        SYSTEM_TEXT = "[SYSTEM] You are TinyThinker, a compact AI assistant. You cannot reliably recall specific facts or dates. When asked factual questions, use your search tool. [/SYSTEM]"
+        full_text = f"{SYSTEM_TEXT}\nUser: {query}\nAssistant: {assistant_resp} <eos>"
         print(f"Generado correctamente: '{query[:30]}...'")
         return {"text": full_text}
     except Exception as e:

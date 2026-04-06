@@ -34,23 +34,39 @@ def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
     t = torch.arange(end, device=freqs.device, dtype=torch.float32)
     freqs = torch.outer(t, freqs).float()
-    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)
-    return freqs_cis
+    return freqs
 
-def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
+def reshape_for_broadcast(freqs: torch.Tensor, x: torch.Tensor):
     ndim = x.ndim
     assert 0 <= 1 < ndim
-    assert freqs_cis.shape == (x.shape[1], x.shape[-1]), f"{freqs_cis.shape} vs {x.shape}"
+    assert freqs.shape == (x.shape[1], x.shape[-1]), f"{freqs.shape} vs {x.shape}"
     shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
-    return freqs_cis.view(*shape)
+    return freqs.view(*shape)
 
-def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor):
+def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor, freqs: torch.Tensor):
     # Entramos en forma (batch, seq, heads, dim_per_head)
-    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
-    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-    freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
-    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
-    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
+    xq_ = xq.float().reshape(*xq.shape[:-1], -1, 2)
+    xk_ = xk.float().reshape(*xk.shape[:-1], -1, 2)
+    
+    # El x original desdoblado tiene ndim + 1
+    # Usamos xq_[..., 0] para el broadcast (batch, seq, heads, dim_per_head//2)
+    freqs = reshape_for_broadcast(freqs, xq_[..., 0])
+    
+    cos = torch.cos(freqs)
+    sin = torch.sin(freqs)
+    
+    xq_0, xq_1 = xq_.unbind(-1)
+    xk_0, xk_1 = xk_.unbind(-1)
+    
+    xq_out_0 = xq_0 * cos - xq_1 * sin
+    xq_out_1 = xq_0 * sin + xq_1 * cos
+    
+    xk_out_0 = xk_0 * cos - xk_1 * sin
+    xk_out_1 = xk_0 * sin + xk_1 * cos
+    
+    xq_out = torch.stack([xq_out_0, xq_out_1], dim=-1).flatten(3)
+    xk_out = torch.stack([xk_out_0, xk_out_1], dim=-1).flatten(3)
+    
     return xq_out.type_as(xq), xk_out.type_as(xk)
 
 class LoRALinear(nn.Module):
@@ -127,7 +143,7 @@ class Attention(nn.Module):
         xk = xk.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
         xv = xv.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
 
-        xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
+        xq, xk = apply_rotary_emb(xq, xk, freqs=freqs_cis)
 
         # Repetir las claves / valores (K/V) para GQA
         if self.n_rep > 1:

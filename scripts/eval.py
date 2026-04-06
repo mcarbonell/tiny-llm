@@ -49,7 +49,7 @@ def load_model_and_tokenizer(checkpoint_path, device='cpu'):
     tokenizer = Tokenizer.from_file(os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json"))
 
     # Cargar checkpoint completo (desactivar weights_only por compatibilidad)
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
 
     # Usar config del checkpoint
     config = checkpoint['args']

@@ -378,10 +378,10 @@ Prioridad 2 (aceleración):
       (4 archivos: train.py, finetune.py, eval.py, chat.py)
 
 Prioridad 3 (calidad de comportamiento):
-  C1. Actualizar generate_synthetic_data.py con system prompt
-  C2. Regenerar tool_dataset_real.json (~500 ejemplos, ~40min con rate limit)
-  C3. Re-ejecutar finetune.py
-  C4. Actualizar chat.py para inyectar system prompt en inferencia
+  [x] C1. Actualizar generate_synthetic_data.py con system prompt
+  [x] C2. Regenerar tool_dataset_real.json (~500 ejemplos, ~40min con rate limit)
+  [x] C3. Re-ejecutar finetune.py
+  [x] C4. Actualizar chat.py para inyectar system prompt en inferencia
 
 Prioridad 4 (largo plazo):
   D.  Escalar a dim=512, n_layers=12 con corpus combinado (Mejora A+B+D)
