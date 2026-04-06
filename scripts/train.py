@@ -25,6 +25,7 @@ min_lr = 1e-5
 warmup_iters = 200
 eval_interval = 250
 eval_iters = 20
+data_path = "data/train_combined.bin"
 
 # [FIX BUG-C] out_dir definido en scope global ANTES del logging.basicConfig().
 # Antes, el FileHandler fallaba con NameError porque out_dir no existía aún.
@@ -57,18 +58,26 @@ except ImportError:
         device = 'mps'
     print(f"[device] DirectML no disponible, usando: {device}")
 
-# AMP (Precisión Mixta Automática):
-# BF16 en CPU (AMD 8845HS lo soporta nativamente) da un ~1.5-2x de speedup.
-# En CUDA usamos bf16 si está soportado, si no fp32. GradScaler solo aplica para fp16.
-if device == 'cuda':
+# Detectar si DirectML estÃ¡ activo
+_is_dml = str(device).startswith('dml') if not isinstance(device, str) else False
+
+if _is_dml:
+    # DirectML no soporta autocast â€” usar fp32 puro
+    import contextlib
+    ctx = contextlib.nullcontext()
+    ptdtype = torch.float32
+elif device == 'cuda':
     ptdtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    ctx = torch.amp.autocast(device_type='cuda', dtype=ptdtype)
 elif device == 'cpu':
     ptdtype = torch.bfloat16  # AVX-512 BF16 nativo en Zen 4
+    ctx = torch.amp.autocast(device_type='cpu', dtype=ptdtype)
 else:
     ptdtype = torch.float32
+    import contextlib
+    ctx = contextlib.nullcontext()
 
-ctx = torch.amp.autocast(device_type=device if device != 'mps' else 'cpu', dtype=ptdtype)
-scaler = torch.cuda.amp.GradScaler(enabled=(ptdtype == torch.float16 and device == 'cuda'))
+scaler = torch.amp.GradScaler('cuda', enabled=(ptdtype == torch.float16 and device == 'cuda'))
 
 # Fracción del dataset reservada para validación (nunca vista en entrenamiento)
 val_fraction = 0.05
@@ -152,7 +161,7 @@ def main():
             with open(log_file_path, "a", encoding="utf-8") as f:
                 f.write(full_msg + "\n")
 
-    t_print(f"👉 Tokens mapeados en RAM (Memmap): {len(train_data) / 1e6:.2f} Millones")
+    t_print(f"Tokens mapeados en RAM (Memmap): {len(train_data) / 1e6:.2f} Millones")
 
     args = ModelArgs(
         dim=256,
@@ -169,32 +178,32 @@ def main():
     if _cli.use_gradient_checkpointing:
         for layer in model.layers:
             layer.use_checkpoint = True
-        t_print("✅ Gradient checkpointing ACTIVADO (menor RAM, mayor tiempo de backward)")
+        t_print("Gradient checkpointing ACTIVADO (menor RAM, mayor tiempo de backward)")
     
     total_params = sum(p.numel() for p in model.parameters())
     
     header = f"""========================================
-DATE: {start_date.strftime('%Y-%m-%d %H:%M:%S')}
-DEVICE: {device.upper()}
---------------- HYPERPARAMS -----------
-batch_size: {batch_size}
-seq_len: {seq_len}
-grad_accum_steps: {grad_accum_steps}
-max_iters: {max_iters}
-learning_rate: {learning_rate}
---------------- MODEL PARAMS ----------
-dim: {args.dim}
-n_layers: {args.n_layers}
-n_heads: {args.n_heads}
-vocab_size: {args.vocab_size}
-TOTAL PARAMS: {total_params / 1e6:.2f}M
-========================================"""
+    DATE: {start_date.strftime('%Y-%m-%d %H:%M:%S')}
+    DEVICE: {str(device).upper()}
+    --------------- HYPERPARAMS -----------
+    batch_size: {batch_size}
+    seq_len: {seq_len}
+    grad_accum_steps: {grad_accum_steps}
+    max_iters: {max_iters}
+    learning_rate: {learning_rate}
+    --------------- MODEL PARAMS ----------
+    dim: {args.dim}
+    n_layers: {args.n_layers}
+    n_heads: {args.n_heads}
+    vocab_size: {args.vocab_size}
+    TOTAL PARAMS: {total_params / 1e6:.2f}M
+    ========================================"""
     t_print(header)
-    t_print(f"🔥 TinyThinker inicializado en {device.upper()} | Parámetros Totales: {total_params / 1e6:.2f}M")
+    t_print(f"TinyThinker inicializado en {str(device).upper()} | Parámetros Totales: {total_params / 1e6:.2f}M")
     
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-1)
     
-    t_print("🚀 Arrancando Bucle de Entrenamiento Autorregresivo...")
+    t_print("Arrancando Bucle de Entrenamiento Autorregresivo...")
     t0 = time.time()
     
     for iter_num in range(max_iters):
@@ -259,10 +268,6 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
             # Multiplicamos por grad_accum_steps para ver el loss real del batch
             loss_unscaled = loss.item() * grad_accum_steps
             t_print(f"iter {iter_num:4d} | loss {loss_unscaled:.4f} | lr {lr:.2e} | loop {dt*1000:.2f}ms")
-
-if __name__ == "__main__":
-    main()
-ter {iter_num:4d} | loss {loss_unscaled:.4f} | lr {lr:.2e} | loop {dt*1000:.2f}ms")
 
 if __name__ == "__main__":
     main()
