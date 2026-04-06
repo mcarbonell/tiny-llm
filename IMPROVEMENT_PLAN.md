@@ -39,7 +39,7 @@
 - **Archivos:** `scripts/chat.py`, `scripts/finetune.py`
 
 ### 2. Pin dependency versions
-- **Estado:** ⏳ Pendiente - `requirements.txt` usa versiones mínimas. Necesario: versiones exactas con `pip freeze`.
+- **Estado:** ✅ Completado - `requirements.txt` actualizado con versiones exactas (`pip freeze`). Añadido `PyYAML==6.0.3` como dependencia explícita.
 - **Archivos:** `requirements.txt`
 
 ### 3. Add `.env.example` template
@@ -71,7 +71,7 @@
 - **Archivos:** `tests/test_model.py`
 
 ### 10. Add gradient checkpointing (optional toggle)
-- **Estado:** ⏳ Pendiente - Toggle existe pero no hay CLI flag para activarlo.
+- **Estado:** ✅ Completado - Flag `--use_gradient_checkpointing` añadido a `train.py` (vía argparse) y al dataclass `Config`. Activa `layer.use_checkpoint=True` en todas las capas tras la inicialización del modelo.
 - **Archivos:** `model/model.py`, `scripts/config.py`, `scripts/train.py`
 
 ### 11. Add logging framework
@@ -79,11 +79,11 @@
 - **Archivos:** `scripts/train.py`, `scripts/finetune.py`
 
 ### 12. Fix code duplication in `model.py`
-- **Estado:** ⏳ Pendiente - Cubierto por BUG-A y BUG-B arriba. Los bugs son consecuencia directa de esta duplicación.
+- **Estado:** ✅ Completado - Resuelto por BUG-A (doble llamada a `attention()`) y BUG-B (dead code eliminado). El `TransformerBlock.forward()` ahora es lineal y sin duplicaciones.
 - **Archivos:** `model/model.py`
 
 ### 13. Add input validation in `eval.py`
-- **Estado:** ⏳ Pendiente - No valida estructura de dataset antes de procesar.
+- **Estado:** ✅ Completado - Función `validate_dataset()` valida tipo lista, no-vacío, y campo `text: str` en los primeros 10 items. Ambas funciones de evaluación llaman a `validate_dataset()` y retornan `None` si el esquema es incorrecto.
 - **Archivos:** `scripts/eval.py`
 
 ### 14. Add error logging in `chat.py`
@@ -95,13 +95,12 @@
 ## 🟡 P1 — Importantes (Mejoras de arquitectura)
 
 ### 1. YAML config support
-- **Estado:** ⏳ Pendiente - `scripts/config.py` soporta argparse pero no YAML.
-- **Solución:** Agregar `--config config.yaml` que cargue parámetros desde archivo YAML.
-- **Archivos:** `scripts/config.py`, `scripts/train.py`, `scripts/finetune.py`
+- **Estado:** ✅ Completado - `Config.from_args()` acepta `--config ruta.yaml`. Los valores del YAML se cargan primero; los flags CLI los sobreescriben. Método `save_yaml()` para serializar la config actual. Claves desconocidas emiten `Warning`. Añadido `configs/train_local.yaml` como ejemplo documentado.
+- **Archivos:** `scripts/config.py`, `configs/train_local.yaml`
 
 ### 2. Integration tests
 - **Estado:** ⏳ Pendiente - Tests unitarios existen, falta end-to-end.
-- **Solución:** Agregar tests de integración que validen pipeline completo.
+- **Diseño propuesto:** Ver sección **🧪 Diseño: Integration Tests** más abajo.
 - **Archivos:** `tests/test_integration.py`
 
 ---
@@ -113,11 +112,11 @@
 - **Archivos:** `tests/test_model.py`
 
 ### 2. Gradient checkpointing CLI flag
-- **Estado:** ⏳ Pendiente - Agregar `--use_gradient_checkpointing` a CLI.
+- **Estado:** ✅ Completado - Cubierto por P0-10. Flag `--use_gradient_checkpointing` activo en `train.py` y `Config`.
 - **Archivos:** `scripts/config.py`, `scripts/train.py`
 
 ### 3. Logging en tool-calling
-- **Estado:** ⏳ Pendiente - Agregar logging a `search_web_tool` con niveles INFO/WARNING/ERROR.
+- **Estado:** ✅ Completado - Cubierto por BUG-D. Logging INFO/WARNING/ERROR en `search_web_tool`. `logging.basicConfig()` con `chat.log` FileHandler en `main()`.
 - **Archivos:** `scripts/chat.py`
 
 ---
@@ -138,25 +137,64 @@
 
 ---
 
-## 📅 Orden de ejecución recomendado
+## 📅 Orden de ejecución — Estado
 
 ```
-# Sprint 1 — Bugs críticos (< 1h)
-1. BUG-A: Fix double attention call (model.py)           → 10 min
-2. BUG-B: Remove dead code (model.py)                   → 5 min
-3. BUG-C: Fix out_dir scope in train.py                 → 5 min
-4. BUG-D: Migrate KV-cache to chat.py                   → 20 min
-5. BUG-E: Fix residual connection in grad-ckpt          → 10 min
+# Sprint 1 — Bugs críticos ✅ COMPLETADO (commit bd71c55)
+1. BUG-A: Fix double attention call (model.py)           → ✅
+2. BUG-B: Remove dead code (model.py)                   → ✅
+3. BUG-C: Fix out_dir scope in train.py                 → ✅
+4. BUG-D: Migrate KV-cache to chat.py                   → ✅
+5. BUG-E: Fix residual connection in grad-ckpt          → ✅
 
-# Sprint 2 — Mejoras de calidad (< 2h)
-6. Add gradient checkpointing CLI flag                   → 15 min
-7. Add error logging in search_web_tool (chat.py)        → 15 min
-8. Add input validation (eval.py)                        → 20 min
-9. Pin dependencies (pip freeze)                         → 5 min
-10. YAML config support                                  → 30 min
-11. Integration tests                                    → 1 hr
+# Sprint 2 — Mejoras de calidad ✅ COMPLETADO (commit 7208076)
+6. Add gradient checkpointing CLI flag                   → ✅
+7. Add error logging in search_web_tool (chat.py)        → ✅
+8. Add input validation (eval.py)                        → ✅
+9. Pin dependencies (pip freeze)                         → ✅
+10. YAML config support                                  → ✅
+
+# Sprint 3 — Tests de integración ⏳ EN PROGRESO
+11. Integration tests                                    → ⏳ (ver diseño abajo)
 ```
 
 ---
 
-*Última actualización: 2026-04-06 (auditoría de código — 5 bugs nuevos añadidos)*
+## 🧪 Diseño: Integration Tests (`tests/test_integration.py`)
+
+Los tests de integración validan el **pipeline completo** end-to-end sin mocks, usando el modelo y checkpoint reales del proyecto.
+
+### Filosofía
+- Cada test valida **un flujo completo**, no un componente aislado.
+- Se usan los artefactos reales del proyecto (`ckpt_best.pt`, `tokenizer.json`, `tool_dataset_real.json`).
+- Los tests deben ser **rápidos** (se evita entrenamiento desde cero): se usa el checkpoint existente en modo eval.
+- Se ejecuta con `pytest -m integration` para poder aislarlos de los unit tests.
+
+### Tests propuestos
+
+| ID | Nombre | Flujo completo cubierto |
+|----|--------|-------------------------|
+| IT-1 | `test_checkpoint_load_and_generate` | Load checkpoint → tokenize prompt → generate N tokens → assert non-empty output |
+| IT-2 | `test_eval_pipeline_perplexity` | Load checkpoint → load dataset → `calculate_perplexity()` → assert is finite float |
+| IT-3 | `test_eval_pipeline_tool_accuracy` | Load checkpoint → load dataset → `evaluate_tool_calling_accuracy()` → assert 0 ≤ acc ≤ 1 |
+| IT-4 | `test_kv_cache_consistency` | Generate con KV-cache vs. sin KV-cache → assert logits idénticos para misma secuencia |
+| IT-5 | `test_yaml_config_roundtrip` | `Config.from_args()` → `save_yaml()` → re-load desde YAML → assert campos iguales |
+| IT-6 | `test_dataset_validation_rejects_invalid` | `validate_dataset()` con datasets mal formados → assert raises `ValueError` |
+
+### Decisiones de diseño
+
+- **IT-1/2/3:** Saltar si no existe `checkpoints/ckpt_best.pt` (marker `@pytest.mark.skipif`).
+- **IT-4:** Fundamental para garantizar que el KV-cache del BUG-D fix produce resultados correctos.
+- **IT-5:** Puro Python, no necesita GPU ni modelo. Siempre ejecuta.
+- **IT-6:** Puro Python, siempre ejecuta. Valida los 4 casos de schema inválido.
+
+### Ejecución prevista
+```bash
+pytest tests/test_integration.py -v                    # todos
+pytest tests/ -v                                        # unit + integration
+pytest tests/test_integration.py -k "config or valid"  # solo los rápidos
+```
+
+---
+
+*Última actualización: 2026-04-06 (Sprint 1 + 2 completados — Diseño IT añadido)*
