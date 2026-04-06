@@ -56,7 +56,7 @@ else:
     import contextlib
     ctx = contextlib.nullcontext()
 
-scaler = torch.cuda.amp.GradScaler(enabled=(ptdtype == torch.float16 and device == 'cuda'))
+scaler = torch.amp.GradScaler('cuda', enabled=(ptdtype == torch.float16 and device == 'cuda'))
 
 # ==========================================
 # GESTIÓN SEGURA DE CHECKPOINTS

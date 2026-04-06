@@ -7,10 +7,6 @@ import torch
 import torch.nn.functional as F
 from tokenizers import Tokenizer
 
-logger = logging.getLogger(__name__)
-
-logger = logging.getLogger(__name__)
-
 # Añadir ruta base para resolver import del modelo
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from model.model import TinyThinker, ModelArgs
@@ -33,7 +29,6 @@ except ImportError:
 CHECKPOINTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "checkpoints")
 TOKENIZER_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model", "tokenizer.json")
 
-# Logger de módulo (se configura en main())
 logger = logging.getLogger(__name__)
 
 def resolve_checkpoint(checkpoint_arg=None):

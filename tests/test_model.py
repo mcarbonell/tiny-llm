@@ -77,17 +77,22 @@ def test_lora_adapter():
     print("LoRA adapter verificado correctamente.")
 
 def test_tokenizer_roundtrip():
-    """Verificar encode -> decode = original."""
+    """Verificar encode -> decode ≈ original (ByteLevel BPE puede añadir espacio inicial)."""
     tokenizer_path = os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json")
     if not os.path.exists(tokenizer_path):
         print("Tokenizer no encontrado, saltando test.")
         return
     
     tokenizer = Tokenizer.from_file(tokenizer_path)
-    test_text = "Hello world this is a test"
-    tokens = tokenizer.encode(test_text).ids
-    decoded = tokenizer.decode(tokens)
-    assert decoded == test_text, f"Roundtrip failed: '{decoded}' != '{test_text}'"
+    test_texts = [
+        "Hello world this is a test",
+        "The quick brown fox jumps over the lazy dog",
+        "Python is great for ML",
+    ]
+    for test_text in test_texts:
+        tokens = tokenizer.encode(test_text).ids
+        decoded = tokenizer.decode(tokens).strip()
+        assert decoded == test_text, f"Roundtrip failed: '{decoded}' != '{test_text}'"
     print("Tokenizer roundtrip verificado correctamente.")
 
 def test_data_loading():
