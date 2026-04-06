@@ -113,7 +113,16 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
                 logits[logits < v[:, [-1]]] = -float('Inf')
 
             probs = F.softmax(logits, dim=-1)
-            next_token = torch.multinomial(probs, num_samples=1)
+            # DirectML multinomial CPU fallback (Evita NaN errors en GPU)
+            probs_cpu = probs.cpu()
+            if torch.isnan(probs_cpu).any() or torch.isinf(probs_cpu).any():
+                 probs_cpu = torch.nan_to_num(probs_cpu, nan=0.0, posinf=1.0, neginf=0.0)
+            
+            # Asegurarse de que la suma no sea cero (evita otro error de multinomial)
+            if probs_cpu.sum() == 0:
+                 probs_cpu = torch.ones_like(probs_cpu) / probs_cpu.size(-1)
+
+            next_token = torch.multinomial(probs_cpu, num_samples=1).to(DEVICE)
 
             # Añadir al contexto acumulado
             x = torch.cat((x, next_token), dim=1)
@@ -212,7 +221,7 @@ def main():
         loss_val = f"{loss_val:.4f}"
 
     print(f"\n=============================================")
-    print(f"¡Modelo Activo usando acelerador {DEVICE.upper()}!")
+    print(f"¡Modelo Activo usando acelerador {str(DEVICE).upper()}!")
     print(f"Entrenamiento base -> Iteración: {iter_n} | Pérdida: {loss_val}")
     print("=============================================")
     print("Escribe tu mensaje ('exit' o 'quit' para salir).")
