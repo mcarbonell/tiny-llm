@@ -384,7 +384,7 @@ Prioridad 3 (calidad de comportamiento):
   [x] C4. Actualizar chat.py para inyectar system prompt en inferencia
 
 Prioridad 4 (largo plazo):
-  D.  Escalar a dim=512, n_layers=12 con corpus combinado (Mejora A+B+D)
+  [x] D.  Escalar a dim=512, n_layers=12 con corpus combinado (Mejora A+B+D) - (Archivo de config preparado)
 ```
 
 ---
