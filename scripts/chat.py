@@ -16,7 +16,7 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 if getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
     DEVICE = 'mps'
 
-CKPT_PATH = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt.pt")
+CKPT_PATH = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_finetuned.pt")
 TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json")
 
 def search_web_tool(query: str) -> str:
@@ -50,6 +50,7 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
     generated_tokens = []
     in_tool_call = False
     current_tool_query = []
+    previous_printed_text = ""
     
     print("\nTinyThinker> ", end="", flush=True)
 
@@ -108,14 +109,20 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
                 x = torch.cat((x, torch.tensor([result_ids], device=DEVICE)), dim=1)
                 
                 print("\nTinyThinker> ", end="", flush=True)
+                previous_printed_text = "" # Resetear el buffer de impresión
+                generated_tokens = []      # Resetear buffer de tokens
             else:
                 # Mientras genere la query, guardamos los IDs
                 current_tool_query.append(token_id)
         else:
             # -------- FLUJO TEXTUAL NORMAL --------
-            # Es un token de texto estandar, lo imprimimos (esto mimetiza el stream de ChatGPT)
-            text = tokenizer.decode([token_id])
-            print(text, end="", flush=True)
+            generated_tokens.append(token_id)
+            # Decodificamos TODO lo generado hasta ahora y restamos lo que ya habíamos impreso.
+            # Esto evita que el tokenizador se coma los espacios entre palabras.
+            current_text = tokenizer.decode(generated_tokens)
+            new_text = current_text[len(previous_printed_text):]
+            print(new_text, end="", flush=True)
+            previous_printed_text = current_text
             
     print("\n")
 

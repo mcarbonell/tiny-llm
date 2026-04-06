@@ -6,7 +6,7 @@ Este documento centraliza el plan de ataque del proyecto, basado en los blueprin
 - [x] **1.1. Setup Inicial:**
   - [x] Crear estructura de directorios (`model`, `data`, `scripts`, `tests`).
   - [x] Definir `requirements.txt` (PyTorch, transformers, tokenizers, datasets).
-- [ ] **1.2. Tokenizador y Datos:**
+- [x] **1.2. Tokenizador y Datos:**
   - [x] Descargar un subtipo de `roneneldan/TinyStories`.
   - [x] Entrenar Tokenizador BPE personalizado (~16k-32k vocabulario).
   - [x] Tokenizar y guardar el dataset de entrenamiento en binario para carga rápida.
@@ -24,16 +24,16 @@ Este documento centraliza el plan de ataque del proyecto, basado en los blueprin
   - [x] Ejecutar prueba en entorno local verificando que el *loss* disminuye.
 
 ## Fase 2: Razonamiento (Chain of Thought - CoT)
-- [ ] Descargar y curar un subconjunto lógico/matemático (ej. de `OpenOrca` o `gsm8k`).
-- [ ] Preparar prompt templates para enseñar pensar "paso a paso" con marcas `<THINK> ... </THINK>`.
-- [ ] Fine-tuning (Continual Pre-training) del modelo de Fase 1 con el dataset CoT.
+- [x] Descargar y curar un subconjunto lógico/matemático (ej. de `OpenOrca` o `gsm8k`).
+- [x] Preparar prompt templates para enseñar pensar "paso a paso" con marcas `<THINK> ... </THINK>`.
+- [x] Fine-tuning (Continual Pre-training) del modelo de Fase 1 con el dataset CoT.
 
 ## Fase 3: Uso de Herramientas (Tool-Calling)
 - [x] **3.1. Generación de Dataset Sintético:**
   - [x] Crear script para generar ejemplos de consulta -> decisión de tool-call -> resultado -> respuesta.
-- [ ] **3.2. Formato y Entrenamiento:**
-  - [ ] Implementar tokens especiales (`<TOOL_CALL>`, `</TOOL_CALL>`, `<TOOL_RESULT>`).
-  - [ ] Entrenar el modelo sobre la sintaxis estricta.
+- [x] **3.2. Formato y Entrenamiento:**
+  - [x] Implementar tokens especiales (`<TOOL_CALL>`, `</TOOL_CALL>`, `<TOOL_RESULT>`).
+  - [x] Entrenar el modelo sobre la sintaxis estricta.
 - [x] **3.3. Inferencia Interactiva (`chat.py`):**
   - [x] Desarrollar sistema interactivo que pause la generación de texto al detectar un `<TOOL_CALL>`.
   - [x] Conectar una herramienta real (ej. DuckDuckGo o Wikipedia).

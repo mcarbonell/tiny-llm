@@ -29,3 +29,7 @@ data/
 .DS_Store
 .idea/
 .vscode/
+
+# Secrets
+.env
+docs/research/
