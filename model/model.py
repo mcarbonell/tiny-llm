@@ -16,6 +16,9 @@ class ModelArgs:
     norm_eps: float = 1e-5
     max_batch_size: int = 32
     max_seq_len: int = 1024     # ContextWindow base
+    lora_r: int = 0             # Rangos de LoRA. 0 = deshabilitado.
+    lora_alpha: float = 16.0     # Escala de LoRA.
+    lora_dropout: float = 0.0    # Dropout para adaptadores LoRA.
 
 class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -50,16 +53,52 @@ def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor
     xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
     return xq_out.type_as(xq), xk_out.type_as(xk)
 
+class LoRALinear(nn.Module):
+    def __init__(self, in_features: int, out_features: int, bias: bool = False, r: int = 0, alpha: float = 1.0, dropout: float = 0.0):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.r = r
+        self.alpha = alpha
+        self.scaling = alpha / r if r > 0 else 1.0
+        self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
+
+        self.weight = nn.Parameter(torch.empty(out_features, in_features))
+        self.bias = nn.Parameter(torch.zeros(out_features)) if bias else None
+
+        if r > 0:
+            self.lora_down = nn.Linear(in_features, r, bias=False)
+            self.lora_up = nn.Linear(r, out_features, bias=False)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)
+            bound = 1 / math.sqrt(fan_in)
+            nn.init.uniform_(self.bias, -bound, bound)
+        if self.r > 0:
+            nn.init.zeros_(self.lora_up.weight)
+            nn.init.kaiming_uniform_(self.lora_down.weight, a=math.sqrt(5))
+
+    def forward(self, x: torch.Tensor):
+        result = F.linear(x, self.weight, self.bias)
+        if self.r > 0:
+            lora_out = self.lora_up(self.lora_down(self.dropout(x)))
+            return result + lora_out * self.scaling
+        return result
+
 class FeedForward(nn.Module):
-    def __init__(self, dim: int, hidden_dim: int, multiple_of: int, ffn_dim_multiplier: float):
+    def __init__(self, dim: int, hidden_dim: int, multiple_of: int, ffn_dim_multiplier: float, lora_r: int = 0, lora_alpha: float = 1.0, lora_dropout: float = 0.0):
         super().__init__()
         hidden_dim = int(2 * hidden_dim / 3)
         if ffn_dim_multiplier is not None:
             hidden_dim = int(ffn_dim_multiplier * hidden_dim)
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
 
-        self.w1 = nn.Linear(dim, hidden_dim, bias=False)
-        self.w2 = nn.Linear(hidden_dim, dim, bias=False)
+        self.w1 = LoRALinear(dim, hidden_dim, bias=False, r=lora_r, alpha=lora_alpha, dropout=lora_dropout)
+        self.w2 = LoRALinear(hidden_dim, dim, bias=False, r=lora_r, alpha=lora_alpha, dropout=lora_dropout)
         self.w3 = nn.Linear(dim, hidden_dim, bias=False)
 
     def forward(self, x):
@@ -75,9 +114,9 @@ class Attention(nn.Module):
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
         self.head_dim = args.dim // args.n_heads
 
-        self.wq = nn.Linear(args.dim, args.n_heads * self.head_dim, bias=False)
-        self.wk = nn.Linear(args.dim, self.n_kv_heads * self.head_dim, bias=False)
-        self.wv = nn.Linear(args.dim, self.n_kv_heads * self.head_dim, bias=False)
+        self.wq = LoRALinear(args.dim, args.n_heads * self.head_dim, bias=False, r=args.lora_r, alpha=args.lora_alpha, dropout=args.lora_dropout)
+        self.wk = LoRALinear(args.dim, self.n_kv_heads * self.head_dim, bias=False, r=args.lora_r, alpha=args.lora_alpha, dropout=args.lora_dropout)
+        self.wv = LoRALinear(args.dim, self.n_kv_heads * self.head_dim, bias=False, r=args.lora_r, alpha=args.lora_alpha, dropout=args.lora_dropout)
         self.wo = nn.Linear(args.n_heads * self.head_dim, args.dim, bias=False)
 
     def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: torch.Tensor, past_key_value=None):
@@ -123,6 +162,9 @@ class TransformerBlock(nn.Module):
             hidden_dim=4 * args.dim,
             multiple_of=args.multiple_of,
             ffn_dim_multiplier=args.ffn_dim_multiplier,
+            lora_r=args.lora_r,
+            lora_alpha=args.lora_alpha,
+            lora_dropout=args.lora_dropout,
         )
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)

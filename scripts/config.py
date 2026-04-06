@@ -11,6 +11,9 @@ class Config:
     n_kv_heads: int = 4
     vocab_size: int = 16384
     max_seq_len: int = 1024
+    lora_r: int = 0
+    lora_alpha: float = 16.0
+    lora_dropout: float = 0.0
     
     # Training parameters
     batch_size: int = 16
@@ -53,6 +56,9 @@ class Config:
         parser.add_argument('--n_kv_heads', type=int, default=4, help='Number of KV heads (GQA)')
         parser.add_argument('--vocab_size', type=int, default=16384, help='Vocabulary size')
         parser.add_argument('--max_seq_len', type=int, default=1024, help='Maximum sequence length')
+        parser.add_argument('--lora_r', type=int, default=0, help='LoRA rank (0 disables LoRA)')
+        parser.add_argument('--lora_alpha', type=float, default=16.0, help='LoRA alpha scaling')
+        parser.add_argument('--lora_dropout', type=float, default=0.0, help='LoRA dropout')
         
         # Training
         parser.add_argument('--batch_size', type=int, default=16, help='Batch size')

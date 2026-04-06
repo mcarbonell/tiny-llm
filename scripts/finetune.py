@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import argparse
 import torch
 import torch.nn.functional as F
 from tokenizers import Tokenizer
@@ -89,6 +90,27 @@ def get_batch(data):
         x, y = x.to(device), y.to(device)
     return x, y
 
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Fine-tune TinyThinker con soporte LoRA")
+    parser.add_argument('--lora_r', type=int, default=0, help='Rank de LoRA. 0 = deshabilitado.')
+    parser.add_argument('--lora_alpha', type=float, default=16.0, help='Escala de LoRA.')
+    parser.add_argument('--lora_dropout', type=float, default=0.0, help='Dropout de LoRA.')
+    parser.add_argument('--data_file', type=str, default=DATA_FILE, help='Ruta del dataset JSON para fine-tuning')
+    parser.add_argument('--batch_size', type=int, default=batch_size, help='Batch size para fine-tuning')
+    parser.add_argument('--seq_len', type=int, default=seq_len, help='Longitud de secuencia para fine-tuning')
+    parser.add_argument('--max_iters', type=int, default=max_iters, help='Número máximo de iteraciones')
+    parser.add_argument('--eval_interval', type=int, default=eval_interval, help='Intervalo de evaluación')
+    parser.add_argument('--eval_iters', type=int, default=eval_iters, help='Evaluación con cuántos pasos')
+    parser.add_argument('--learning_rate', type=float, default=learning_rate, help='LR para fine-tuning')
+    return parser.parse_args()
+
+
+def freeze_base_weights(model):
+    for name, param in model.named_parameters():
+        if 'lora_' not in name:
+            param.requires_grad = False
+
 @torch.no_grad()
 def estimate_loss(model, data):
     model.eval()
@@ -111,18 +133,38 @@ def main():
             logger.error("❌ Error: No hay modelo base. Debes finalizar la Fase 1 primero.")
             sys.exit(1)
             
+    cmd_args = parse_args()
+    global batch_size, seq_len, max_iters, eval_interval, eval_iters, learning_rate
+    batch_size = cmd_args.batch_size
+    seq_len = cmd_args.seq_len
+    max_iters = cmd_args.max_iters
+    eval_interval = cmd_args.eval_interval
+    eval_iters = cmd_args.eval_iters
+    learning_rate = cmd_args.learning_rate
+
     print(f"🧠 Cargando Mente Base Mestra desde: {os.path.basename(BASE_CKPT)}")
     checkpoint = torch.load(BASE_CKPT, map_location=device, weights_only=False)
     args = checkpoint['args']
+    args.lora_r = cmd_args.lora_r
+    args.lora_alpha = cmd_args.lora_alpha
+    args.lora_dropout = cmd_args.lora_dropout
     
+    global DATA_FILE
+    DATA_FILE = cmd_args.data_file
+
     model = TinyThinker(args)
-    model.load_state_dict(checkpoint['model'])
+    model.load_state_dict(checkpoint['model'], strict=False)
     model.to(device)
-    
-    # Creamos un Optimizador FRECO.
-    # El modelo tiene memoria de cómo hablar, pero los gradientes deben ser suaves
-    print(f"🔧 Preparando Optimizador (Low Learning Rate: {learning_rate})...")
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+
+    if cmd_args.lora_r > 0:
+        freeze_base_weights(model)
+        print(f"✅ LoRA activado: r={cmd_args.lora_r}, alpha={cmd_args.lora_alpha}, dropout={cmd_args.lora_dropout}")
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f"🔧 Parámetros entrenables LoRA: {trainable}")
+        optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=learning_rate, weight_decay=weight_decay)
+    else:
+        print(f"🔧 Preparando Optimizador (Low Learning Rate: {learning_rate})...")
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     
     data = load_and_tokenize_dataset()
     

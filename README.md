@@ -43,12 +43,18 @@ python scripts/prepare_data.py
 # 4. Arrancar el pre-entrenamiento
 python scripts/train.py
 
-# 5. (Opcional) Inferencia interactiva con tool-calling
+# 5. Fine-tuning con LoRA
+python scripts/finetune.py --lora_r 8 --lora_alpha 16 --data_file data/tool_dataset_real.json
+
+# 6. (Opcional) Inferencia interactiva con tool-calling
 python scripts/chat.py
 
-# 6. Evaluar el modelo (perplexity y accuracy en tool-calling)
+# 7. Evaluar el modelo (perplexity y accuracy en tool-calling)
 python scripts/eval.py --checkpoint checkpoints/ckpt_finetuned.pt
 ```
+
+## 📌 Nota sobre dataset
+El finetuning por defecto usa `data/tool_dataset_real.json`, pero puedes cambiar el archivo con `--data_file`.
 
 ---
 *Construido artesanalmente desde cero.*

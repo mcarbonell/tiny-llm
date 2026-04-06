@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import torch
 import json
 from tokenizers import Tokenizer
-from model.model import TinyThinker, ModelArgs, precompute_freqs_cis
+from model.model import TinyThinker, ModelArgs, precompute_freqs_cis, LoRALinear
 
 def test_model_forward():
     # Instanciamos una versión de juguete de la red solo para comprobar cálculos de tensores
@@ -58,6 +58,23 @@ def test_gqa_shapes():
     assert output.shape == expected_shape, f"Attention output shape: {output.shape} != {expected_shape}"
     assert kv[0].shape[1] == args.n_heads, f"KV heads after expansion: {kv[0].shape[1]} != {args.n_heads}"
     print("GQA shapes verificadas correctamente.")
+
+def test_lora_adapter():
+    args = ModelArgs(dim=128, n_layers=2, n_heads=4, n_kv_heads=2, vocab_size=1000, max_seq_len=64, lora_r=4, lora_alpha=32.0, lora_dropout=0.1)
+    model = TinyThinker(args)
+    assert isinstance(model.layers[0].attention.wq, LoRALinear), "LoRA no se aplicó a la proyección WQ"
+    assert model.layers[0].attention.wq.r == 4, "Rank de LoRA incorrecto"
+
+    for name, param in model.named_parameters():
+        if 'lora_' not in name:
+            param.requires_grad = False
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    assert trainable > 0, "No hay parámetros entrenables para LoRA"
+
+    tokens = torch.randint(0, args.vocab_size, (1, 8))
+    logits = model(tokens)
+    assert logits.shape == (1, 8, args.vocab_size)
+    print("LoRA adapter verificado correctamente.")
 
 def test_tokenizer_roundtrip():
     """Verificar encode -> decode = original."""
