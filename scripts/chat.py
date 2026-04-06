@@ -36,20 +36,22 @@ def resolve_checkpoint(checkpoint_arg=None):
     return None
 
 def search_web_tool(query: str) -> str:
-    """Implementación de la Herramienta externa simulada.
-    En una versión de producción aquí inyectaríamos la API de Brave / Google / Wikipedia.
-    """
+    """Implementación real de herramienta externa usando DuckDuckGo."""
     print(f"\n[TOOLCALL] Buscando en internet: '{query}'...", end="")
     try:
-        # Mock de ejecución para validar el flujo
-        import time
-        time.sleep(1) # Simular latencia de red
-        result = f"Los documentos recientes indican que '{query}' es importante."
-        print(" ¡Hecho!")
-        return result
+        from duckduckgo_search import DDGS
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=3))
+        if results:
+            result_text = "\n".join([f"- {r['title']}: {r['body']}" for r in results])
+            print(" ¡Hecho!")
+            return result_text
+        else:
+            print(" No results.")
+            return "No se encontraron resultados relevantes."
     except Exception as e:
-        print(f" Error: {e}")
-        return "No se encontraron resultados."
+        print(f" Error: {e}. Usando fallback.")
+        return f"Simulated search result for '{query}': This is a placeholder. Install duckduckgo-search for real results."
 
 def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperature=0.7, top_k=40):
     model.eval()

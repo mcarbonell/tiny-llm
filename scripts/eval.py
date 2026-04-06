@@ -70,21 +70,30 @@ def calculate_perplexity(model, tokenizer, dataset_path, device='cpu', seq_len=2
     return perplexity
 
 def generate_text(model, tokenizer, input_ids, max_new_tokens=50, temperature=1.0, device='cpu', top_k=40):
-    """Genera texto de forma básica (sin KV-cache por ahora)."""
+    """Genera texto con KV-cache para eficiencia."""
     model.eval()
+    generated_tokens = input_ids.squeeze().tolist()  # Asumir (1, seq) -> list
+    past_key_values = None
+    
     with torch.no_grad():
         for _ in range(max_new_tokens):
-            logits = model(input_ids)
-            next_token_logits = logits[:, -1, :] / temperature
+            input_tensor = torch.tensor([generated_tokens[-1]], dtype=torch.long, device=device).unsqueeze(0)  # (1, 1)
+            outputs = model(input_tensor, past_key_values=past_key_values, use_cache=True)
+            if isinstance(outputs, tuple):
+                logits, past_key_values = outputs
+            else:
+                logits = outputs
+                past_key_values = None
             
-            # Top-K filtering
+            next_token_logits = logits[:, -1, :] / temperature
             if top_k is not None:
                 v, _ = torch.topk(next_token_logits, min(top_k, next_token_logits.size(-1)))
                 next_token_logits[next_token_logits < v[:, [-1]]] = -float('Inf')
             
-            next_token = torch.multinomial(F.softmax(next_token_logits, dim=-1), 1).squeeze(-1)  # (batch,)
-            input_ids = torch.cat([input_ids, next_token.unsqueeze(-1)], dim=1)  # cat along seq dim
-    return input_ids
+            next_token = torch.multinomial(F.softmax(next_token_logits, dim=-1), 1).item()
+            generated_tokens.append(next_token)
+    
+    return torch.tensor(generated_tokens, dtype=torch.long).unsqueeze(0)  # Devolver (1, seq)
 
 def evaluate_tool_calling_accuracy(model, tokenizer, dataset_path, device='cpu', max_length=512):
     """Evalúa la accuracy en tool-calling: si el modelo genera <TOOL_CALL> cuando es apropiado."""

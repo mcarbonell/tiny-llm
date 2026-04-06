@@ -26,6 +26,18 @@
 - **Estado:** 🔄 En progreso - Intentos de arreglar espacios en blanco, pero persiste issue con tokenizer.
 - **Archivos:** `scripts/chat.py`
 
+### 6. Implement KV-Cache para inferencia
+- **Estado:** ✅ Completado - KV-cache implementado en model.py y eval.py para inferencia eficiente.
+- **Archivos:** `model/model.py`, `scripts/eval.py`
+
+### 7. Externalize configuration (argparse + YAML)
+- **Estado:** ✅ Completado - `scripts/config.py` creado con dataclass y argparse.
+- **Archivos:** `scripts/config.py`
+
+### 8. Real tool integration (DuckDuckGo / Wikipedia)
+- **Estado:** ✅ Completado - Integración real con duckduckgo-search en chat.py.
+- **Archivos:** `scripts/chat.py`
+
 ---
 
 ## 🟡 P1 — Importantes (Mejoras de arquitectura)

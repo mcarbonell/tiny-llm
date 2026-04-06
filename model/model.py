@@ -80,7 +80,7 @@ class Attention(nn.Module):
         self.wv = nn.Linear(args.dim, self.n_kv_heads * self.head_dim, bias=False)
         self.wo = nn.Linear(args.n_heads * self.head_dim, args.dim, bias=False)
 
-    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: torch.Tensor):
+    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: torch.Tensor, past_key_value=None):
         bsz, seqlen, _ = x.shape
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
 
@@ -99,6 +99,11 @@ class Attention(nn.Module):
         xk = xk.transpose(1, 2)
         xv = xv.transpose(1, 2)
 
+        if past_key_value is not None:
+            past_key, past_value = past_key_value
+            xk = torch.cat([past_key, xk], dim=1)
+            xv = torch.cat([past_value, xv], dim=1)
+
         # Atención por producto escalar (escalada y con máscara causal)
         scores = torch.matmul(xq, xk.transpose(2, 3)) / math.sqrt(self.head_dim)
         if mask is not None:
@@ -107,7 +112,7 @@ class Attention(nn.Module):
         
         output = torch.matmul(scores, xv)
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
-        return self.wo(output)
+        return self.wo(output), (xk, xv)
 
 class TransformerBlock(nn.Module):
     def __init__(self, args: ModelArgs):
@@ -122,9 +127,11 @@ class TransformerBlock(nn.Module):
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
 
-    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: torch.Tensor):
-        h = x + self.attention(self.attention_norm(x), freqs_cis, mask)
+    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: torch.Tensor, past_key_value=None):
+        h = x + self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)[0]
         out = h + self.feed_forward(self.ffn_norm(h))
+        if past_key_value is not None:
+            return out, self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)[1]
         return out
 
 class TinyThinker(nn.Module):
@@ -147,7 +154,7 @@ class TinyThinker(nn.Module):
         freqs_cis = precompute_freqs_cis(self.args.dim // self.args.n_heads, self.args.max_seq_len * 2)
         self.register_buffer("freqs_cis", freqs_cis, persistent=False)
 
-    def forward(self, tokens: torch.Tensor):
+    def forward(self, tokens: torch.Tensor, past_key_values=None, use_cache=False):
         bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
         freqs_cis = self.freqs_cis[:seqlen]
@@ -158,9 +165,24 @@ class TinyThinker(nn.Module):
             mask = torch.full((seqlen, seqlen), float('-inf'), device=tokens.device)
             mask = torch.triu(mask, diagonal=1)
 
-        for layer in self.layers:
-            h = layer(h, freqs_cis, mask)
+        past_key_values_out = []
+        for i, layer in enumerate(self.layers):
+            past_kv = past_key_values[i] if past_key_values else None
+            layer_out = layer(h, freqs_cis, mask, past_kv)
+            if isinstance(layer_out, tuple):
+                h, past_kv_out = layer_out
+                past_key_values_out.append(past_kv_out)
+            else:
+                h = layer_out
             
         h = self.norm(h)
         logits = self.output(h)
+        if use_cache:
+            return logits, past_key_values_out
+        return logits
+            
+        h = self.norm(h)
+        logits = self.output(h)
+        if use_cache:
+            return logits, past_key_values_out
         return logits
