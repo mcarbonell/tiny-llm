@@ -3,11 +3,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.pytest_cache/
 
 # Entornos virtuales
 venv/
 env/
 .venv/
+venv_gpu/
 
 # Variables de entorno
 .env
@@ -33,8 +35,5 @@ data/
 .idea/
 .vscode/
 
-# Secrets
-.env
+# Local docs
 docs/research/
-
-venv_gpu/
