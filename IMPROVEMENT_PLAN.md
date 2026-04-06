@@ -197,4 +197,4 @@ pytest tests/test_integration.py -k "config or valid"  # solo los rápidos
 
 ---
 
-*Última actualización: 2026-04-06 (Sprint 1 + 2 completados — Diseño IT añadido)*
+*Última actualización: 2026-04-06 (Sprint 1, 2 y 3 completados — Tests de Integración implementados)*
