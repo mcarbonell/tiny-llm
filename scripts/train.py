@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import sys
+import logging
 
 # Agregar ruta base para resolver el import del modelo
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -25,9 +26,16 @@ warmup_iters = 200
 eval_interval = 250
 eval_iters = 20
 
-out_dir = os.path.join(os.path.dirname(__file__), "..", "checkpoints")
-os.makedirs(out_dir, exist_ok=True)
-data_path = os.path.join(os.path.dirname(__file__), "..", "data", "train.bin")
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(os.path.join(out_dir, 'train.log')),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # ----------------------------------
 # Configuración Inicial y Hardware
@@ -124,7 +132,7 @@ def main():
         lines = str(msg).split('\n')
         for line in lines:
             full_msg = f"[{elapsed_str}] {line}"
-            print(full_msg)
+            logger.info(full_msg)
             with open(log_file_path, "a", encoding="utf-8") as f:
                 f.write(full_msg + "\n")
 

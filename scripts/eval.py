@@ -147,7 +147,7 @@ def main():
     # Resolver checkpoint
     if not args.checkpoint:
         checkpoints_dir = os.path.join(os.path.dirname(__file__), "..", "checkpoints")
-        for ckpt in ['ckpt_best.pt', 'ckpt_finetuned.pt', 'ckpt.pt']:
+        for ckpt in ['ckpt_finetuned.pt', 'ckpt_best.pt', 'ckpt.pt']:
             path = os.path.join(checkpoints_dir, ckpt)
             if os.path.exists(path):
                 args.checkpoint = path

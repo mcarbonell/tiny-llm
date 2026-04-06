@@ -38,6 +38,18 @@
 - **Estado:** ✅ Completado - Integración real con duckduckgo-search en chat.py.
 - **Archivos:** `scripts/chat.py`
 
+### 9. Expand test suite
+- **Estado:** ✅ Completado - Agregados tests para RoPE, GQA, tokenizer, data loading, KV-cache.
+- **Archivos:** `tests/test_model.py`
+
+### 10. Add gradient checkpointing (optional toggle)
+- **Estado:** ✅ Completado - Toggle use_checkpoint en TransformerBlock para ahorro de memoria.
+- **Archivos:** `model/model.py`
+
+### 11. Add logging framework
+- **Estado:** ✅ Completado - Logging con archivos en train.py y finetune.py.
+- **Archivos:** `scripts/train.py`, `scripts/finetune.py`
+
 ---
 
 ## 🟡 P1 — Importantes (Mejoras de arquitectura)

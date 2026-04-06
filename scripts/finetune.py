@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 from tokenizers import Tokenizer
 import contextlib
+import logging
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from model.model import TinyThinker, ModelArgs
@@ -45,12 +46,23 @@ OUT_CKPT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_fi
 DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "tool_dataset_real.json")
 TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json")
 
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(os.path.join(os.path.dirname(__file__), "..", "logs", "finetune.log")),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 def load_and_tokenize_dataset():
     if not os.path.exists(DATA_FILE):
-        print(f"Error: No se encontró {DATA_FILE}")
+        logger.error(f"Error: No se encontró {DATA_FILE}")
         sys.exit(1)
         
-    print("Cargando tokenizador y transcribiendo dataset sintético a memoria...")
+    logger.info("Cargando tokenizador y transcribiendo dataset sintético a memoria...")
     tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
     
     with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -64,7 +76,7 @@ def load_and_tokenize_dataset():
         
     # Convertir a un solo tensor maestro
     data_tensor = torch.tensor(all_ids, dtype=torch.long)
-    print(f"Dataset de Fine-Tuning procesado: {len(data_tensor)} tokens listos para alinear a TinyThinker.")
+    logger.info(f"Dataset de Fine-Tuning procesado: {len(data_tensor)} tokens listos para alinear a TinyThinker.")
     return data_tensor
 
 def get_batch(data):
@@ -96,7 +108,7 @@ def main():
         # Si no existe el _best (por usar el script antiguo), buscamos el ckpt genérico rotativo
         BASE_CKPT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt.pt")
         if not os.path.exists(BASE_CKPT):
-            print("❌ Error: No hay modelo base. Debes finalizar la Fase 1 primero.")
+            logger.error("❌ Error: No hay modelo base. Debes finalizar la Fase 1 primero.")
             sys.exit(1)
             
     print(f"🧠 Cargando Mente Base Mestra desde: {os.path.basename(BASE_CKPT)}")

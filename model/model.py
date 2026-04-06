@@ -126,10 +126,26 @@ class TransformerBlock(nn.Module):
         )
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
+        self.use_checkpoint = False  # Toggle para gradient checkpointing
 
     def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: torch.Tensor, past_key_value=None):
-        h = x + self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)[0]
-        out = h + self.feed_forward(self.ffn_norm(h))
+        if self.use_checkpoint and self.training:
+            # Usar checkpointing para ahorrar memoria
+            def attention_forward(x):
+                return self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)[0]
+            h = torch.utils.checkpoint.checkpoint(attention_forward, x)
+        else:
+            h = x + self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)[0]
+        
+        if self.use_checkpoint and self.training:
+            def ffn_forward(h):
+                return self.feed_forward(self.ffn_norm(h))
+            out = h + torch.utils.checkpoint.checkpoint(ffn_forward, h)
+        else:
+            out = h + self.feed_forward(self.ffn_norm(h))
+        
+        if past_key_value is not None:
+            return out, self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)[1]
         if past_key_value is not None:
             return out, self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)[1]
         return out
