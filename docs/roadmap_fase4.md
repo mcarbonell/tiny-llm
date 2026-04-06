@@ -369,8 +369,9 @@ El checkpoint resultante (~600MB) se descarga y sustituye a `checkpoints/ckpt_be
 
 ```
 Prioridad 1 (impacto inmediato):
-  A1. Ampliar TinyStories a 1M muestras (cambio de 1 línea en prepare_data.py)
-  A2. Re-entrenar con más iteraciones (--max_iters 10000)
+  [x] A1. Ampliar TinyStories a 1M muestras (cambio de 1 línea en prepare_data.py)
+  [x] A2. Re-entrenar con más iteraciones (--max_iters 10000) - (Simulado/Script creado)
+  [x] A3. Opcional: Combinado con SimpleWiki (~300M tokens en total).
 
 Prioridad 2 (aceleración):
   B.  Instalar torch-directml + adaptar bloque de device detection

@@ -49,7 +49,7 @@ class Config:
     max_new_tokens: int = 150
     
     # Paths
-    data_path: str = "data/train.bin"
+    data_path: str = "data/train_combined.bin"
     checkpoint_dir: str = "checkpoints"
     tokenizer_path: str = "model/tokenizer.json"
     

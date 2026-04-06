@@ -28,7 +28,7 @@ def main():
         # Fallback al final si no pre-entrenamos con un <eos> explícito en las strings
         eos_id = tokenizer.token_to_id("<pad>") or 0
 
-    max_samples = 200000 
+    max_samples = 1000000 
     
     print(f"Tokenizando y guardando hasta {max_samples} muestras en {output_path}...")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
