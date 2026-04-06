@@ -10,6 +10,40 @@ import argparse
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from model.model import TinyThinker, ModelArgs
 
+
+def validate_dataset(data: object, path: str) -> list:
+    """Valida la estructura del dataset antes de procesarlo.
+    Devuelve la lista validada o lanza ValueError con mensaje descriptivo.
+    """
+    if not isinstance(data, list):
+        raise ValueError(
+            f"Dataset '{path}' debe ser una lista JSON de objetos, "
+            f"pero se encontró: {type(data).__name__}"
+        )
+    if len(data) == 0:
+        raise ValueError(f"Dataset '{path}' está vacío (lista de longitud 0).")
+
+    # Validar estructura de los primeros N items (rápido, no bloquea con datasets grandes)
+    sample_size = min(len(data), 10)
+    for i, item in enumerate(data[:sample_size]):
+        if not isinstance(item, dict):
+            raise ValueError(
+                f"Dataset '{path}': el elemento [{i}] debe ser un objeto JSON, "
+                f"pero se encontró: {type(item).__name__}"
+            )
+        if 'text' not in item:
+            raise ValueError(
+                f"Dataset '{path}': el elemento [{i}] no tiene campo 'text'. "
+                f"Claves encontradas: {list(item.keys())}"
+            )
+        if not isinstance(item['text'], str):
+            raise ValueError(
+                f"Dataset '{path}': el campo 'text' del elemento [{i}] debe ser str, "
+                f"pero se encontró: {type(item['text']).__name__}"
+            )
+    return data
+
+
 def load_model_and_tokenizer(checkpoint_path, device='cpu'):
     """Carga el modelo y tokenizador."""
     tokenizer = Tokenizer.from_file(os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json"))
@@ -34,7 +68,13 @@ def calculate_perplexity(model, tokenizer, dataset_path, device='cpu', seq_len=2
         return None
 
     with open(dataset_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+        raw = json.load(f)
+
+    try:
+        data = validate_dataset(raw, dataset_path)
+    except ValueError as e:
+        print(f"Error de validación del dataset: {e}")
+        return None
 
     # Tokenizar todo el dataset
     all_tokens = []
@@ -102,7 +142,13 @@ def evaluate_tool_calling_accuracy(model, tokenizer, dataset_path, device='cpu',
         return None
 
     with open(dataset_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+        raw = json.load(f)
+
+    try:
+        data = validate_dataset(raw, dataset_path)
+    except ValueError as e:
+        print(f"Error de validación del dataset: {e}")
+        return None
 
     correct = 0
     total = 0

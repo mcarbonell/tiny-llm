@@ -1,0 +1,32 @@
+# =====================================================
+# TinyThinker — Configuración de Entrenamiento Local
+# Uso: python scripts/train.py --config configs/train_local.yaml
+#      python scripts/train.py --config configs/train_local.yaml --max_iters 10000
+# =====================================================
+
+# --- Modelo (configuración didáctica, optimizada para CPU local) ---
+dim: 256
+n_layers: 6
+n_heads: 8
+n_kv_heads: 4
+vocab_size: 16384
+max_seq_len: 256
+
+# --- Entrenamiento ---
+batch_size: 16
+seq_len: 256
+max_iters: 5000
+learning_rate: 0.001
+min_lr: 0.00001
+warmup_iters: 200
+eval_interval: 250
+eval_iters: 20
+weight_decay: 0.1
+grad_clip: 1.0
+grad_accum_steps: 4
+use_gradient_checkpointing: false
+
+# --- Rutas ---
+data_path: data/train.bin
+checkpoint_dir: checkpoints
+tokenizer_path: model/tokenizer.json

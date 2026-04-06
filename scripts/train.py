@@ -122,18 +122,23 @@ def get_lr(it):
     return min_lr + coeff * (learning_rate - min_lr)
 
 def main():
+    import argparse as _ap
+    _parser = _ap.ArgumentParser(description="TinyThinker Pretrain", add_help=False)
+    _parser.add_argument('--use_gradient_checkpointing', action='store_true', default=False,
+                         help='Activa gradient checkpointing para reducir uso de VRAM/RAM.')
+    _cli, _ = _parser.parse_known_args()
+
     # Setup de logs
     log_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
     os.makedirs(log_dir, exist_ok=True)
     start_date = datetime.datetime.now()
     run_id = start_date.strftime("%Y-%m-%d_%H-%M-%S")
     log_file_path = os.path.join(log_dir, f"train_{run_id}.log")
-    
+
     global_start_time = time.time()
     def t_print(msg):
         elapsed = time.time() - global_start_time
         elapsed_str = time.strftime("%H:%M:%S", time.gmtime(elapsed))
-        # Para cabeceras multilinea formateamos todas las lineas con el timestamp
         lines = str(msg).split('\n')
         for line in lines:
             full_msg = f"[{elapsed_str}] {line}"
@@ -142,18 +147,23 @@ def main():
                 f.write(full_msg + "\n")
 
     t_print(f"👉 Tokens mapeados en RAM (Memmap): {len(train_data) / 1e6:.2f} Millones")
-    
-    # Reducimos los parámetros para validar entrenamiento en máquina local sin freirla
+
     args = ModelArgs(
-        dim=256, 
-        n_layers=6, 
-        n_heads=8, 
+        dim=256,
+        n_layers=6,
+        n_heads=8,
         n_kv_heads=4,
-        vocab_size=16384, 
+        vocab_size=16384,
         max_seq_len=seq_len
     )
     model = TinyThinker(args)
     model.to(device)
+
+    # Activar gradient checkpointing en cada capa si se pide via CLI
+    if _cli.use_gradient_checkpointing:
+        for layer in model.layers:
+            layer.use_checkpoint = True
+        t_print("✅ Gradient checkpointing ACTIVADO (menor RAM, mayor tiempo de backward)")
     
     total_params = sum(p.numel() for p in model.parameters())
     
