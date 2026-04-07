@@ -161,7 +161,7 @@ def main():
     eval_iters = cmd_args.eval_iters
     learning_rate = cmd_args.learning_rate
 
-    print(f"🧠 Cargando Mente Base Mestra desde: {os.path.basename(BASE_CKPT)}")
+    print(f"Cargando Mente Base Mestra desde: {os.path.basename(BASE_CKPT)}")
     checkpoint = torch.load(BASE_CKPT, map_location='cpu', weights_only=False)
     args = checkpoint['args']
     args.lora_r = cmd_args.lora_r
@@ -175,24 +175,63 @@ def main():
     model.load_state_dict(checkpoint['model'], strict=False)
     model.to(device)
 
+    # Setup de Logs estÃ¡ndar
+    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    start_date = datetime.datetime.now()
+    log_file = os.path.join(log_dir, f"finetune_{start_date.strftime('%Y%m%d_%H%M%S')}.log")
+    
+    global_start_time = time.time()
+    def t_print(msg):
+        elapsed = time.time() - global_start_time
+        elapsed_str = time.strftime("%H:%M:%S", time.gmtime(elapsed))
+        full_msg = f"[{elapsed_str}] {msg}"
+        print(full_msg)
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(full_msg + "\n")
+
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    
+    header = f"""========================================
+DATE: {start_date.strftime('%Y-%m-%d %H:%M:%S')}
+DEVICE: {str(device).upper()}
+CPU THREADS: {torch.get_num_threads()}
+--------------- HYPERPARAMS -----------
+batch_size: {batch_size}
+seq_len: {seq_len}
+grad_accum_steps: {grad_accum_steps}
+max_iters: {max_iters}
+learning_rate: {learning_rate}
+--------------- MODEL PARAMS ----------
+dim: {args.dim}
+n_layers: {args.n_layers}
+n_heads: {args.n_heads}
+vocab_size: {args.vocab_size}
+TOTAL PARAMS: {total_params / 1e6:.2f}M
+TRAINABLE PARAMS: {trainable_params / 1e6:.2f}M
+========================================"""
+    t_print(header)
+
     if cmd_args.lora_r > 0:
         freeze_base_weights(model)
-        print(f"✅ LoRA activado: r={cmd_args.lora_r}, alpha={cmd_args.lora_alpha}, dropout={cmd_args.lora_dropout}")
+        t_print(f"LoRA activado: r={cmd_args.lora_r}, alpha={cmd_args.lora_alpha}, dropout={cmd_args.lora_dropout}")
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        print(f"🔧 Parámetros entrenables LoRA: {trainable}")
+        t_print(f"Parametros entrenables LoRA: {trainable}")
         optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=learning_rate, weight_decay=weight_decay)
     else:
-        print(f"🔧 Preparando Optimizador (Low Learning Rate: {learning_rate})...")
+        t_print(f"Preparando Optimizador (Low Learning Rate: {learning_rate})...")
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     
     data = load_and_tokenize_dataset()
     
-    print("\n🚀 Iniciando Fase 2/3: Inyección de Lógica y Tool-Calling...")
+    t_print("Iniciando Fase 2/3: Inyeccion de Logica y Tool-Calling...")
     
+    t0 = time.time()
     for iter_num in range(1, max_iters + 1):
         if iter_num % eval_interval == 0:
             val_loss = estimate_loss(model, data)
-            print(f"✨ [ITER {iter_num}] Error de Formato Lógico: {val_loss:.4f} | Guardando Especialización...")
+            t_print(f"✨ [ITER {iter_num}] Error de Formato Logico: {val_loss:.4f} | Guardando Especializacion...")
             ckpt = {
                 'model': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
@@ -227,9 +266,12 @@ def main():
             optimizer.step()
             
         if iter_num % 10 == 0:
-            print(f"iter {iter_num:4d} | fine-tune loss {loss.item()*grad_accum_steps:.4f}")
+            t1 = time.time()
+            dt = t1 - t0
+            t0 = t1
+            t_print(f"iter {iter_num:4d} | fine-tune loss {loss.item()*grad_accum_steps:.4f} | time {dt:.2f}s")
 
-    print(f"\n🎯 ¡Especialización Completada!")
+    t_print("Especializacion Completada!")
     print(f"El modelo original sigue intacto en '{os.path.basename(BASE_CKPT)}'")
     print(f"El NUEVO modelo con 'Tool-Calling' ha sido guardado como: '{os.path.basename(OUT_CKPT)}'")
     print("\nPara interactuar con él, ve a 'scripts/chat.py' y asegúrate de cambiar la ruta de CKPT_PATH a 'ckpt_finetuned.pt'")

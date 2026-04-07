@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 from tokenizers import Tokenizer
 import argparse
+import datetime
 
 # Añadir ruta base
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -206,6 +207,20 @@ def main():
 
     print(f"Cargando modelo desde {args.checkpoint}...")
     model, tokenizer, config = load_model_and_tokenizer(args.checkpoint, device)
+
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"""========================================
+EVALUATION SESSION
+DATE: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+DEVICE: {str(device).upper()}
+CHECKPOINT: {os.path.basename(args.checkpoint)}
+--------------- MODEL PARAMS ----------
+dim: {config.dim}
+n_layers: {config.n_layers}
+n_heads: {config.n_heads}
+vocab_size: {config.vocab_size}
+TOTAL PARAMS: {total_params / 1e6:.2f}M
+========================================""")
 
     # Calcular perplexity
     print("Calculando perplexity...")
