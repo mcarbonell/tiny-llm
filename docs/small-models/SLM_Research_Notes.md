@@ -32,5 +32,11 @@ Los modelos muy pequeños carecen del razonamiento inferencial profundo nativo d
 2. **MoE y MTP (Multi-Token Prediction):** Aceleradores para inference throughput reduciendo los parámetros activos. 
 * **Estado en TinyThinker:** Nosotros estamos mitigando el throughput con Grouped-Query Attention (GQA) con ratio 2:1 y Gradient Checkpointing en `train_scale_b.yaml`.
 
+## 📂 5. Datasets Abiertos (NVIDIA Nemotron 3 Nano/Super)
+Extraídos de los Technical Blogs de NVIDIA, son una mina de oro para nuestros futuros pre-entrenamientos y RL:
+- **Pre-entrenamiento:** `https://huggingface.co/collections/nvidia/nemotron-pre-training-datasets` (10 Trillones de tokens curados, especial foco en razonamiento y código).
+- **Post-Entrenamiento (SFT/RL):** `https://huggingface.co/collections/nvidia/nemotron-post-training-v3` (40M de muestras de alta calidad).
+- **Entornos para Tool-Calling (RL):** `https://huggingface.co/collections/nvidia/nemo-gym` (Crucial para hacer a TinyThinker un experto en la terminal y navegador).
+
 ---
 *Fecha de recolección: 8 de Abril de 2026.*

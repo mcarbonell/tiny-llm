@@ -1,24 +1,21 @@
-# 🏆 PROJECT STATUS: PHASE 5 COMPLETED - LONG CONTEXT
+# 🏆 PROJECT STATUS: FASE 6 - ESCALADO A 50M (SCALE B)
 **Fecha de actualización:** 8 de Abril de 2026
-**Hito Principal:** Ventana de contexto ampliada a 1024 tokens y estabilidad total en el flujo agéntico.
+**Hito Principal:** Entrenamiento SFT del modelo de 12M verificado con éxito estructural. Inicio de pre-entrenamiento 50M.
 
-## Estado de la Fase 5: Escalamiento de Memoria ✅
-Hemos superado la limitación de 256 tokens, permitiendo que TinyThinker maneje conversaciones más largas y resultados de búsqueda más ricos.
+## Estado de la Fase 5: Escalamiento de Memoria y SFT ✅ (Completada)
+Se finalizó el *Supervised Fine-Tuning* (SFT) del modelo 12M utilizando el `dataset_golden_v1.json` (806 muestras) y ventana de 1024 tokens.
+* **Resultado Analítico:** El modelo de 12M (Loss = 2.34) ha dominado el formato y comportamiento de agente (etiquetas `<THINK>`, `<TOOL_CALL>`). Las alucinaciones detectadas (p. ej. inventar "Lahorean Fejilin") certifican que el modelo es estructuralmente brillante pero cognitivamente pequeño.
+* **Conclusión:** El software de inferencia adaptado funciona. El modelo está "aprendido" sintácticamente, pero los 12 Millones de parámetros limitan el entendimiento semántico.
 
-### Logros Técnicos
-1. **Contexto 1024:** Reconfiguración de `ModelArgs` y parcheo de los checkpoints para soportar 1024 tokens de forma nativa.
-2. **Adaptación de RoPE:** Entrenamiento flash del modelo base para estabilizar los embeddings rotatorios en las nuevas posiciones.
-3. **SFT v3:** Re-entrenamiento del LoRA con la nueva ventana de contexto, logrando una pérdida de **0.64**.
-4. **Buscador Robusto:** El sistema de chat ahora maneja correctamente la inyección de grandes bloques de texto sin errores de aserción.
+## Fase Actual: Fase 6 - Capacidad y Coherencia 🚀 (En Progreso)
+Objetivo: Entrenar el modelo Scale B (50M de parámetros). Al confirmar que la arquitectura e pipeline de datos funcionan en la subescala, la capacidad de Scale B solucionará el déficit cognitivo y las alucinaciones.
 
-## Métricas Actuales
-- **Modelo:** 12.46M Parámetros.
+### Trabajos Activos:
+- Modificados `train.py` y `eval.py` para soportar carga dinámica de ficheros `.yaml` y contexto inteligente.
+- Checkpoints de Escala A asilados en `/checkpoints/scale_a_12m/` para dejar espacio a la Escala B.
+- Lanzando entrenamiento de 50 Millones de parámetros con aceleración DirectML (`configs/train_scale_b.yaml`).
+
+## Métricas Actuales (Target Escala B)
+- **Modelo:** ~50M Parámetros (`dim=512`, `n_layers=12`, `n_heads=8(GQA)`).
 - **Contexto:** 1024 Tokens.
-- **Base Checkpoint:** `ckpt_base_305M_ctx1024.pt`.
-- **SFT Checkpoint:** `ckpt_sft_ctx1024.pt`.
-
----
-
-## 🚀 Próximos Pasos (Fase 6)
-1. **Escala B (50M Params):** Entrenar el modelo de mayor capacidad para reducir alucinaciones en el resumen de búsquedas.
-2. **Quantization:** Evaluar el rendimiento en modo cuantizado para mayor velocidad.
+- **Corpus:** `train_combined.bin` (~300M tokens de TinyStories 1M + SimpleWiki).

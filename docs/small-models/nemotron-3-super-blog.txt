@@ -1,0 +1,145 @@
+https://developer.nvidia.com/blog/introducing-nemotron-3-super-an-open-hybrid-mamba-transformer-moe-for-agentic-reasoning/
+
+Introducing Nemotron 3 Super: An Open Hybrid Mamba-Transformer MoE for Agentic Reasoning
+
+Mar 11, 2026
+By Chris Alexiuk and Chintan Patel
+
++69
+Like
+ Discuss (0)
+Agentic AI systems need models with the specialized depth to solve dense technical problems autonomously. They must excel at reasoning, coding, and long-context analysis, while remaining efficient enough to run continuously at scale. 
+
+Multi-agent systems generate up to 15x the tokens of standard chats, re-sending history, tool outputs, and reasoning steps at every turn. Over long tasks, this “context explosion” causes goal drift, where agents gradually lose alignment with the original objective. And using massive reasoning models for every sub-task—the “thinking tax”—makes multi-agent applications too expensive and sluggish for practical use.
+
+Today, we are releasing Nemotron 3 Super to address these limitations. The new Super model is a 120B total, 12B active-parameter model that delivers maximum compute efficiency and accuracy for complex multi-agent applications such as software development and cybersecurity triaging. This model follows the introduction of Nemotron 3 Nano in December.
+
+Super addresses the “thinking tax” with its hybrid mixture-of-experts (MoE) architecture. It delivers over 5x throughput than the previous Nemotron Super. This model tackles the “context explosion” with a native 1M-token context window that gives agents long-term memory for aligned, high-accuracy reasoning. The model is fully open with open weights, datasets, and recipes so developers can easily customize, optimize, and deploy it on their own infrastructure.
+
+What makes Nemotron 3 Super different
+Nemotron 3 Super isn’t just a bigger Nano. It introduces architectural innovations that allow the model to mitigate some of the typical efficiency-accuracy tradeoffs for high-capacity reasoning models:
+
+Latent MoE that calls 4x as many expert specialists for the same inference cost, by compressing tokens before they reach the experts.
+Multi-token prediction (MTP) that predicts multiple future tokens in one forward pass, dramatically reducing generation time for long sequences and enabling built-in speculative decoding.
+Hybrid Mamba-Transformer backbone integrating Mamba layers for sequence efficiency with Transformer layers for precision reasoning, delivering higher throughput with 4x improved memory and compute efficiency.
+Native NVFP4 pretraining optimized for NVIDIA Blackwell, significantly cutting memory requirements and speeding up inference by 4x on NVIDIA B200 compared to FP8 on NVIDIA H100, while maintaining accuracy.
+Multi-environment reinforcement-learning (RL) post-trained with RL across 21 environment configurations using NVIDIA NeMo Gym and NVIDIA NeMo RL, trained with more than 1.2 million environment rollouts.
+These advantages come together to create a model that is well suited for long-running autonomous agents. On PinchBench—a new benchmark for determining how well LLM models perform as the brain of an OpenClaw agent—Nemotron 3 Super scores 85.6% across the full test suite, making it the best open model in its class.
+
+See it in action
+If you want to go hands on with Nemotron 3 Super, follow the tutorial video below. This will walk you through how to use the model from build.nvidia.com to OpenCode.
+
+
+Video 1. A tutorial walkthrough of Nemotron 3 Super
+Diving deep into the architecture
+Hybrid Mamba-Transformer MoE backbone
+Super builds on the same hybrid philosophy as Nano but at a fundamentally different scale. The backbone interleaves three layer types:
+
+Mamba-2 layers handle the majority of sequence processing. State space models (SSMs) provide linear-time complexity with respect to sequence length, which is what makes the 1M-token context window practical rather than theoretical. When an agent needs to reason over an entire codebase, a long conversation history, or a stack of retrieved documents, Mamba layers keep the memory footprint manageable.
+
+Transformer attention layers are interleaved at key depths. Pure SSMs can struggle with precise associative recall—the kind of task where you need to find one specific fact buried in a long context. The attention layers preserve this capability, ensuring that Super maintains high-fidelity retrieval even when the “needle” sits in the middle of a haystack of conflicting information.
+
+MoE layers scale effective parameter count without the cost of dense computation. Only a subset of experts activates per token, keeping latency low and throughput high—critical when many agents are running concurrently in a shared deployment.
+
+Architecture diagram of Nemotron-3-Super-120B-A12B showing five groups of repeating layer blocks connected in sequence. Each block contains six layers in order: Mamba-2, Latent MoE, Mamba-2, Attention, Mamba-2, Latent MoE.
+Figure 1. A layer pattern diagram showing repeating blocks of Mamba-2/MoE pairs interleaved with attention layers
+Latent MoE
+Standard MoE architectures route tokens directly from the model’s full hidden dimension to the experts. As models grow, this routing layer becomes a bottleneck—it increases compute costs and limits how many experts you can practically deploy.
+
+Super introduces latent MoE: Before routing decisions are made, token embeddings are projected into a compressed, low-rank latent space. Expert computation happens in this smaller dimension, and results are projected back to the full model dimension afterward.
+
+Why this matters in practice:
+
+More experts, same cost. By compressing tokens before they reach the experts, latent MoE enables the model to consult 4x as many experts for the exact same computational cost as running one.
+
+Finer-grained specialization. With more experts available, the model can afford highly specialized routing—for example, activating distinct experts for Python syntax versus SQL logic—that are only activated when strictly necessary. This granularity is especially valuable in agentic settings where a single conversation may span tool calls, code generation, data analysis, and conversational reasoning within a few turns.
+
+A diagram comparing standard MoE and Latent MoE transformer architectures side by side.
+Figure 2. Side-by-side comparison of standard MoE vs. latent MoE architectures
+Multi-token prediction (MTP)
+Standard language models are trained to predict one token at a time—a fundamentally myopic objective. Super is trained with MTP, where specialized prediction heads forecast several future tokens simultaneously from each position.
+
+This has two concrete benefits:
+
+Stronger reasoning during training. Predicting multiple future tokens forces the model to internalize longer-range structure and logical dependencies. Rather than learning to guess plausible next words, the model must learn to anticipate coherent sequences. This produces measurable gains on chain-of-thought tasks where each step must follow logically from the last.
+
+Built-in speculative decoding at inference. By predicting multiple future tokens simultaneously in one forward pass, MTP dramatically reduces the time required to generate long sequences. The MTP heads provide draft predictions that can be verified in parallel, enabling up to 3x wall-clock speedups for structured generation tasks like code and tool calls—without requiring a separate draft model.
+
+Both benefits stem from the same design decision. Unlike architectures that train independent prediction heads per offset, Super uses a shared-weight design across all MTP heads. This keeps the parameter overhead minimal while improving training stability—the heads learn to agree on coherent continuations rather than diverging into offset-specific shortcuts. The same weight sharing also makes the speculative drafts more consistent at longer draft lengths, which is where independently trained heads typically degrade.
+
+Native NVFP4 pretraining
+Most quantized models start as full-precision and get compressed after training, which inevitably introduces accuracy loss. Super takes a different approach: The majority of floating-point multiply-accumulate operations during pretraining run in NVFP4, the NVIDIA 4-bit floating-point format. Optimized for Blackwell, this significantly cuts memory requirements and speeds up inference compared to FP8, while maintaining accuracy.
+
+Training natively in reduced precision means the model learns to be accurate within the constraints of 4-bit arithmetic from the very first gradient update. The result is a model that is mathematically stable and accurate despite running on a significantly reduced memory footprint.
+
+How we trained Nemotron 3 Super
+Nemotron 3 Super is trained in three sequential phases, each building on the last. Pretraining establishes broad world knowledge and language understanding at scale. Supervised fine-tuning shapes the model’s behavior across the task types it will encounter in deployment. Reinforcement learning then refines that behavior against verifiable outcomes across diverse agentic environments.
+https://huggingface.co/collections/nvidia/nemotron-pre-training-datasets
+
+Pretraining
+Super is pretrained on 25 trillion tokens using NVFP4, the NVIDIA 4-bit floating-point format optimized for NVIDIA Blackwell. Rather than quantizing a full-precision model after the fact, Super trains natively in reduced precision from the first gradient update—meaning the model learns to be accurate within the constraints of 4-bit arithmetic throughout pretraining, not just at inference. The pretraining corpus spans 10 trillion unique curated tokens, with the model seeing 25 trillion total tokens across the run, including additional compute focused on reasoning and coding.
+
+Supervised fine-tuning
+Before reinforcement learning, Super undergoes supervised fine-tuning on about 7 million SFT samples. They’re drawn from a broader post-training corpus of 40 million samples, which cover reasoning, instruction following, coding, safety, and multi-step agent tasks. This stage establishes the behavioral foundation that RL then refines. The model learns the format and structure of correct responses across task types, giving the subsequent RL phase a stable starting point rather than optimizing from a raw pretrained checkpoint.
+
+Multi-environment reinforcement learning
+To align Super with real agentic behavior, the model is post-trained using reinforcement learning across diverse environments in NeMo Gym, the NVIDIA open source library for building and scaling RL training environments. These environments evaluate the model’s ability to perform sequences of actions—generating correct tool calls, writing functional code, producing multi-part plans that satisfy verifiable criteria—not just providing satisfying single-turn responses. These trajectories form the core training data to run reinforcement learning at scale with the NeMo RL open library.
+
+This trajectory-based reinforcement produces a model that behaves reliably under multi-step workflows, reduces reasoning drift, and handles the kinds of structured operations common in agentic pipelines.
+
+Benchmarking Nemotron 3 Super
+Nemotron 3 Super achieves leading accuracy across a number of important agentic benchmarks while maintaining incredible throughput.
+
+A bar chart benchmarking Nemotron 3 Super 120B against GPT OSS 120B and Qwen3 122B across accuracy and throughput metrics.
+Figure 3. A chart comparing Nemotron 3 Super accuracy on key benchmarks against similarly sized open models.
+The “Super + Nano” deployment pattern
+Nemotron 3 Nano is an excellent choice for achieving high accuracy in executing targeted, individual steps within an agentic workflow. However, when multi-agent applications escalate to complex, multi-step activities, they require a high-capacity model for superior planning and reasoning.  Think of a computer use agent that needs to make decisions between different modalities of tools in order to, say, create a presentation with 10 high-quality slides.
+
+Nemotron 3 Super is ideal in this use. For instance, in software development, simple merge requests can be addressed by Nemotron 3 Nano while complex coding tasks that require deeper understanding of the code base can be handled by Nemotron 3 Super. And expert-level coding tasks can be addressed by proprietary models.
+
+Building with Super’s open resources
+Nemotron 3 Super is fully open—weights, datasets, and recipes—so developers can easily customize, optimize, and deploy the model on their own infrastructure for maximum privacy and security.
+
+Model weights
+Full parameter checkpoints for Nemotron 3 Super are available on Hugging Face and through NVIDIA NIM. The NVIDIA Nemotron Open Model License gives enterprises the flexibility to maintain data control and deploy anywhere.
+
+End-to-end training and evaluation recipes
+We are releasing the complete training and evaluation recipe for Nemotron 3 Super, covering the full pipeline from pretraining through alignment. This enables developers to reproduce Super’s training, adapt the recipe for domain-specific variants, or use it as a starting point for their own hybrid architecture research.
+
+Deployment cookbooks
+We’ve built ready-to-use cookbooks for major inference engines, each with configuration templates, performance tuning guidance, and reference scripts:
+https://github.com/NVIDIA-NeMo/Nemotron/tree/main/usage-cookbook/Nemotron-3-Super
+
+vLLM Cookbook: High-throughput continuous batching and streaming for Super.
+SGLang Cookbook: Fast, lightweight inference optimized for multi-agent tool-calling workloads.
+NVIDIA TensorRT LLM Cookbook: Fully optimized TensorRT LLM engines with latent MoE kernels for production-grade, low-latency deployment.
+Fine-tuning cookbooks
+Explore our Nemotron 3 Super customization cookbooks to efficiently fine-tune for your domain (LoRA/SFT) or advance its agentic reasoning capabilities (GRPO/DAPO):
+
+LoRA SFT on Nemotron 3 Super using NVIDIA NeMo Megatron-Bridge 
+https://github.com/NVIDIA-NeMo/Nemotron/tree/main/usage-cookbook/Nemotron-3-Super/lora-text2sql
+https://github.com/NVIDIA-NeMo/Megatron-Bridge
+
+LoRA SFT on Nemotron 3 Super using NVIDIA NeMo Automodel
+https://github.com/NVIDIA-NeMo/Automodel
+
+GRPO/DAPO on Nemotron 3 Super using NeMo RL 
+https://github.com/NVIDIA-NeMo/Nemotron/tree/main/usage-cookbook/Nemotron-3-Super/grpo-dapo
+
+Open datasets
+Nemotron 3 Super is built on a fully open, end-to-end data pipeline that spans pretraining, post-training, and interactive reinforcement learning—giving developers reproducible building blocks for agentic AI.
+
+Pretraining corpora: https://huggingface.co/collections/nvidia/nemotron-pre-training-datasets
+10 trillion curated tokens, trained over 25 trillion total seen tokens, plus an additional 10 billion tokens focused on reasoning and 15 million coding problems. All aggressively deduplicated and quality-filtered to maximize signal-to-noise.
+
+Post-training datasets: https://huggingface.co/collections/nvidia/nemotron-post-training-v3
+40 million new supervised and alignment samples, covering reasoning, instruction following, coding, safety, and multi-step agent tasks across supervised fine-tuning, preference data, and RL trajectories (about 7 million used directly for SFT)
+
+RL tasks and environments: https://huggingface.co/collections/nvidia/nemo-gym
+Interactive RL across 21 environment configurations and 37 datasets (~10 of which are being released) including software engineer-style agent training and tool-augmented search/planning tasks—moving beyond static text into dynamic, verifiable execution workflows and generating ~1.2 million environment rollouts during training.
+
+Open training and evaluation infrastructure
+NVIDIA publishes development techniques and tools, giving researchers and enterprises the flexibility to customize Nemotron 3 Super or build their own reasoning models. All recipes integrate with the Nemotron GitHub repository, NeMo Gym, NeMo RL, NVIDIA NeMo Data Designer, NVIDIA NeMo Curator, and NVIDIA NeMo Evaluator—providing a complete, reproducible pipeline from data to deployment.
+
+All Nemotron models are released with an open evaluation approach, including a published evaluation recipe that enables anyone to rerun and inspect the full evaluation pipeline from Nemotron 3 Super.
+

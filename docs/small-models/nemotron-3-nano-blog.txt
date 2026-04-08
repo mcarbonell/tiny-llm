@@ -1,0 +1,131 @@
+Inside NVIDIA Nemotron 3: Techniques, Tools, and Data That Make It Efficient and Accurate
+The new open model family introduces open Hybrid Mamba-Transformer MoE for fast, long-context reasoning in multi-agent systems.
+
+
+Dec 15, 2025
+By Chris Alexiuk, Shashank Verma and Chintan Patel
+
++45
+Like
+ Discuss (0)
+AI-Generated Summary
+
+Agentic AI systems increasingly rely on collections of cooperating agents—retrievers, planners, tool executors, verifiers—working together across large contexts and long time spans. These systems demand models that deliver fast throughput, strong reasoning accuracy, and persistent coherence over large inputs. They also require a level of openness that allows developers to customize, extend, and deploy models wherever they operate.
+
+The NVIDIA Nemotron 3 family of open models (Nano, Super, Ultra), datasets, and techniques were designed to build specialized agentic AI for this new era.
+
+It introduces a hybrid Mamba-Transformer mixture-of-experts (MoE) architecture, reinforcement learning (RL) across interactive environments, and a native 1M-token context window that enables high-throughput, long-horizon reasoning for multi-agent applications.
+
+What’s new in Nemotron 3
+Nemotron 3 introduces several innovations that directly address the needs of agentic systems:
+
+A hybrid Mamba-Transformer MoE backbone for superior test-time efficiency and long-range reasoning.
+Multi-environment reinforcement learning designed around real-world agentic tasks.
+A 1M-token context length supporting deep multi-document reasoning and long-running agent memory.
+An open, transparent training pipeline, including data, weights, and recipes.
+Immediate availability of Nemotron 3 Nano with ready-to-use cookbooks. Super and Ultra to follow.
+Simple prompt example
+Video 1. A video of a table seating logical puzzle running on Nemotron 3 Nano.
+Key technologies for Nemotron 3 models
+Hybrid Mamba-Transformer MoE
+Nemotron 3 integrates three architectures into a single backbone: 
+
+Mamba layers for efficient sequence modeling, 
+Transformer layers for precision reasoning, and 
+MoE routing for scalable compute efficiency. 
+Mamba excels at tracking long-range dependencies with minimal memory overhead, enabling sustained performance even when processing hundreds of thousands of tokens. Transformer layers complement this with detailed attention mechanisms that capture structural and logical relationships required for tasks such as code manipulation, math reasoning, or complex planning.
+
+The MoE component amplifies effective parameter count without incurring the cost of dense computation. Only a subset of experts is activated for each token, reducing latency and improving throughput. This architecture is particularly well-suited to agent clusters where many lightweight agents must operate concurrently—each generating plans, inspecting context, or executing tool-based workflows.
+
+Layer pattern diagram for Nemotron 3 showing repeating blocks: 5 repetitions of Mamba-2/MoE pairs with one attention layer, followed by 3 Mamba-2/MoE pairs, then 1 block with attention, and finally 4 Mamba-2/MoE pairs ending with a single Mamba-2 layer.
+Figure 1. Nemotron 3 hybrid architecture. The model interleaves Mamba-2 and MoE layers with only a few self-attention layers, maximizing inference throughput while maintaining state-of-the-art accuracy.
+Multi-environment reinforcement learning (RL) training
+To align Nemotron 3 with real agentic behavior, the model is post-trained using reinforcement learning across many environments in NeMo Gym, an open-source library for building and scaling RL environments. These environments evaluate the model’s ability to perform sequences of actions––going beyond just single-turn responses––such as generating correct tool calls, writing functional code, or producing multi-part plans that satisfy verifiable criteria.
+
+This trajectory-based reinforcement produces a model that behaves reliably under multi-step workflows, reduces reasoning drift, and handles the kinds of structured operations common in agentic pipelines. Because NeMo Gym is open, developers can reuse, extend, or even create their own environments when customizing models for domain-specific tasks.
+
+These environments and RL datasets are being made available, alongside NeMo Gym, for those interested in using the environments to train their own models.
+
+The graph from Artificial Analysis plots small language reasoning models on intelligence index on the y-axis and output tokens per second on the x-axis. Nemotron 3 Nano delivers the highest throughput efficiency using the hybrid MoE architecture and leading accuracy with advanced Reinforcement Learning using NeMo Gym
+Figure 2. Nemotron 3 Nano delivers the highest throughput efficiency using the hybrid MoE architecture and leading accuracy with advanced Reinforcement Learning using NeMo Gym
+1M token context length
+Nemotron 3’s 1M-token context enables sustained reasoning across large codebases, long documents, extended conversations, and aggregated retrieved content. Instead of relying on fragmented chunking heuristics, agents can keep entire evidence sets, history buffers, and multi-stage plans in a single context window.
+
+This long context window is enabled by Nemotron 3’s hybrid Mamba-Transformer architecture, which processes extremely large sequences efficiently. MoE routing also keeps the per-token compute lower, making these large sequences practical at time of inference.
+
+For enterprise-scale retrieval-augmented generation, compliance analysis, multi-hour agent sessions, or monolithic repository understanding, the 1M-token window significantly improves factual grounding and reduces context fragmentation.
+
+Key technologies coming in Nemotron 3 Super and Ultra
+Latent MoE
+Nemotron 3 Super and Ultra introduce latent MoE, where experts operate on a shared latent representation before outputs are projected back to token space. This approach allows the model to call on 4x more experts at the same inference cost, enabling better specialization around subtle semantic structures, domain abstractions, or multi-hop reasoning patterns.
+
+Side-by-side comparison of standard MoE and latent MoE architectures. Standard MoE (left) shows self-attention feeding into a router that dispatches to 4 experts plus a shared expert, then combines outputs. latent MoE (right) adds latent down-projection before routing and up-projection after combining, enabling 8 experts instead of 4 while reducing all-to-all communication overhead.
+Figure 3. Standard MoE vs. latent MoE architectures. In latent MoE, tokens are projected into a smaller latent dimension for expert routing and computation, reducing communication costs while enabling more experts and higher accuracy per byte.
+Multi-token prediction (MTP)
+MTP enables the model to predict several future tokens in a single forward pass, significantly increasing throughput for long reasoning sequences and structured outputs. For planning, trajectory generation, extended chain-of-thought, or code generation, MTP reduces latency and improves agent responsiveness.
+
+Diagram showing multi-token prediction architecture where a shared model trunk connects to four independent output heads, each predicting successive future tokens from the same input
+Figure 4. Multi-ioken prediction (introduced in the paper Better & Faster Large Language Models via Multi-token Prediction) predicts multiple future tokens simultaneously, improving accuracy by ~2.4% during training while enabling speculative decoding speedups at inference.
+NVFP4 training
+Super and Ultra are pretrained in  NVFP4, NVIDIA’s 4-bit floating-point format that offers best-in-class cost-accuracy for training and inference. An updated NVFP4 recipe was designed for Nemotron 3 to ensure accurate and stable pretraining on our 25T token pretraining dataset. The majority of floating-point multiply-accumulate operations during pretraining are in NVFP4. 
+
+Ongoing commitment to open models
+Nemotron 3 reinforces NVIDIA’s commitment to transparency and developer empowerment. The model weights are openly released under the NVIDIA Open Model License. NVIDIA’s synthetic pretraining corpus––nearly 10 trillion tokens––can be inspected or repurposed. Developers also have access to detailed training and post-training recipes within the Nemotron GitHub repository, enabling complete reproducibility and customization.
+
+Nemotron 3 Nano is available now, forming the foundation for high-throughput, long-context agentic systems. Super and Ultra, coming in the first half of 2026, will extend this foundation with higher reasoning depth and efficiency-minded architectural enhancements.
+
+Nemotron 3 Nano: available now
+Available today is our first model in the series: Nemotron 3 Nano. This 30B total 3B active parameter model is specifically designed for DGX Spark, H100, and B200 GPUs, allowing you to build with the most efficient model in our Nemotron 3 family.
+
+If you want to learn more about the technical details of Nemotron 3 Nano, you can find a detailed Hugging Face blog, or you can read the technical report available here.
+
+This model delivers highest throughput efficiency, achieves leading score on Artificial Analysis Intelligence Index, and preserves the Artificial Analysis Openness Index score that NVIDIA Nemotron Nano V2 achieved. That showcases its effectiveness for multi-agent tasks while remaining transparent and customizable.
+
+Bar chart ranking 12 models by Intelligence Index score across 10 evaluations. NVIDIA Nemotron 3 Nano scores 52.
+Figure 5. On the Artificial Analysis Intelligence Index v3.0, Nemotron 3 Nano achieves leading accuracy (52) among similarly-sized models.
+Developers can start using Nemotron 3 Nano today across multiple deployment and development workflows:
+
+Launch the model with NVIDIA cookbooks
+We’re providing ready-to-use cookbooks for several major inference engines:
+
+vLLM Cookbook: Deploy Nemotron 3 Nano with high-throughput continuous batching and streaming.
+SGLang Cookbook: Run fast, lightweight inference optimized for multi-agent tool-calling workloads.
+TRT-LLM Cookbook: Deploy fully optimized TensorRT-LLM engines for low-latency, production-grade environments.
+Each cookbook includes configuration templates, performance tips, and reference scripts so you can get Nemotron 3 Nano running within minutes.
+
+In addition, get started today with Nemotron on any NVIDIA GPU – from GeForce RTX desktops and laptops to RTX Pro workstations, to DGX Spark – using top frameworks and tools such as Llama.cpp, LM Studio and Unsloth.
+
+Build with Nemotron open training datasets
+NVIDIA is also releasing the open datasets used throughout the model’s development, providing unprecedented transparency into how high-performance, trustworthy models are built.
+
+New dataset highlights include:
+
+Nemotron-pretraining: New 3-trillion-token dataset with richer coverage of code, math, and reasoning, enhanced through synthetic augmentation and annotation pipelines.
+https://huggingface.co/collections/nvidia/nemotron-pre-training-datasets
+
+Nemotron-post-training 3.0: 13-million-sample corpus for supervised fine-tuning and reinforcement learning that powers Nemotron 3 Nano’s alignment and reasoning.
+https://huggingface.co/collections/nvidia/nemotron-post-training-v3
+
+Nemotron-RL datasets: Curated collection of RL datasets and environments for tool-use, planning, and multi-step reasoning.
+https://huggingface.co/collections/nvidia/nemo-gym
+
+Nemotron agentic safety dataset: Collection of nearly 11-thousand AI agent workflow traces designed to help researchers evaluate and mitigate emerging safety and security risks in agentic systems.
+https://huggingface.co/datasets/nvidia/Nemotron-AIQ-Agentic-Safety-Dataset-1.0
+
+Paired with NVIDIA NeMo Gym, RL, Data Designer, and Evaluator open libraries, these open datasets enable developers to train, enhance, and evaluate their own Nemotron models.
+
+Explore the Nemotron GitHub: pre-training & RL recipes
+
+NVIDIA maintains an open Nemotron GitHub repository that includes:
+https://github.com/NVIDIA-NeMo/Nemotron/tree/main
+
+Pre-training recipes (already available) showing how Nemotron 3 Nano was trained
+RL alignment recipes for multi-environment optimization
+Data-processing pipelines, tokenizer configuration, and long-context setup
+Future updates will include additional post-training and fine-tuning recipes
+If you want to train your own Nemotron, extend Nano, or produce a domain-specialized variant, the GitHub repository provides the documentation, configurations, and tooling to reproduce key steps end-to-end.
+
+This openness completes the story: You can run the model, deploy the model, inspect how the model was built, and even train your own—all using NVIDIA open resources.
+
+Nemotron 3 Nano is available now. Start building long-context, high-throughput agentic systems today using NVIDIA open models, open tools, open data, and open training infrastructure.
+

@@ -172,6 +172,8 @@ Parametros : Entrenables={sum(p.numel() for p in model.parameters() if p.require
 
     # 5. Bucle
     t0 = time.time()
+    best_val_loss = float('inf')
+    
     for iter_num in range(1, cmd_args.max_iters + 1):
         if iter_num % DEFAULT_EVAL_INTERVAL == 0:
             model.eval()
@@ -180,8 +182,19 @@ Parametros : Entrenables={sum(p.numel() for p in model.parameters() if p.require
                 logits = model(X)
                 # CrossEntropy ignora automáticamente el índice -100
                 loss = F.cross_entropy(logits.view(-1, logits.size(-1)), Y.view(-1))
-                t_print(f"Iter {iter_num} | val_loss {loss.item():.4f} | Guardando...")
-                torch.save({'model': model.state_dict(), 'args': model_args, 'iter_num': iter_num}, OUT_CKPT_DEFAULT)
+                val_loss_val = loss.item()
+                
+                # Guardar siempre un checkpoint histórico
+                ckpt_dict = {'model': model.state_dict(), 'args': model_args, 'iter_num': iter_num, 'val_loss': val_loss_val}
+                history_ckpt = OUT_CKPT_DEFAULT.replace('.pt', f'_iter{iter_num}.pt')
+                torch.save(ckpt_dict, history_ckpt)
+                
+                if val_loss_val < best_val_loss:
+                    best_val_loss = val_loss_val
+                    t_print(f"Iter {iter_num} | val_loss {val_loss_val:.4f} | ¡Nuevo Mejor! Guardando...")
+                    torch.save(ckpt_dict, OUT_CKPT_DEFAULT)
+                else:
+                    t_print(f"Iter {iter_num} | val_loss {val_loss_val:.4f} | (No mejora, best: {best_val_loss:.4f})")
             model.train()
 
         optimizer.zero_grad()
