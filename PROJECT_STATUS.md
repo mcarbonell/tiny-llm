@@ -1,30 +1,31 @@
-# 🏆 PROJECT STATUS: SUCCESSFULLY COMPLETED WITH ENHANCEMENTS
-**Fecha de finalización:** 6 de Abril de 2026
-**Tiempo total de desarrollo:** < 24 Horas + Mejoras P0-P2
+# 🏆 PROJECT STATUS: PHASE 4 COMPLETED - THE REBIRTH
+**Fecha de actualización:** 8 de Abril de 2026
+**Hito Principal:** Re-entrenamiento base exitoso con 300M tokens y Tokenizador ByteLevel.
 
-## Hito Logrado
-El proyecto **TinyThinker** ha alcanzado con éxito todas sus metas arquitectónicas en un tiempo récord. Hemos construido desde cero (sin depender de frameworks de alto nivel más allá de PyTorch) un Modelo de Lenguaje de 12.46 Millones de parámetros con capacidades agénticas.
+## Estado de la Fase 4: Optimización y Escalamiento ✅
+Hemos completado el re-entrenamiento desde cero del "Cerebro Base" de TinyThinker. Este proceso ha corregido las debilidades estructurales de las fases iniciales.
 
-### Demostraciones Tecnológicas Concluidas
-1. **Arquitectura Transformer Pura:** Implementación desde cero de Mecanismos de Atención con GQA (Grouped-Query Attention), RoPE (Rotary Position Embeddings), RMSNorm y SwiGLU.
-2. **Pre-Entrenamiento Autárquico (Fase 1):** Entrenamiento local durante miles de iteraciones sobre un subconjunto de *TinyStories*, logrando bajar la función de pérdida (`Loss`) de 4.00 a ~1.57. El modelo aprendió la gramática inglesa básica.
-3. **Optimización Extrema de Hardware:** Desbloqueo y configuración de rutinas AVX-512 nativas (BF16 Tensor Cores emulados) en CPU AMD Ryzen Zen 4, reduciendo el bucle de entrenamiento a <60ms/iteración. MLOps implementado con `ckpt_best.pt` y *Train/Val split*.
-4. **Generación de Datos Sintéticos:** Programación y ejecución de un orquestador que usa APIs avanzadas (o locales vía LM Studio) para compilar en formato JSON 500 respuestas de razonamiento lógico (`<THINK>`) y llamadas a herramientas (`<TOOL_CALL>`).
-5. **Fine-Tuning Inteligente (Fase 2/3):** Consolidación SFT (Supervised Fine-Tuning) inyectando el dataset estructurado en los pesos del modelo base con un learning rate conservador (`3e-5`), mitigando el olvido catastrófico.
-6. **Injerencia de Inferencia Agéntica:** Creación de un bucle de chat interactivo que intercepta comandos regex, ejecuta búsquedas reales, e inyecta la telemetría en el contexto del modelo en crudo (`<TOOL_RESULT>`).
+### Logros Técnicos Clave
+1. **Corpus de Entrenamiento Realista:** Migración de cuentos infantiles a un mix de **TinyStories + SimpleWiki (305M tokens)**. El modelo ahora posee un "barniz" de conocimiento general antes del fine-tuning.
+2. **Tokenizador Profesional:** Implementación de **ByteLevel BPE**. Se ha eliminado el problema de los espacios en blanco rotos y se han incluido tokens especiales `[SYSTEM]` de forma nativa.
+3. **Optimización Ryzen (AVX-512):** Descubrimiento empírico de que para modelos de 12M-16M, el CPU Ryzen 7 8845HS es **14 veces más rápido** que la iGPU Radeon 780M debido a la latencia de DirectML.
+4. **Estabilidad Numérica:** Corrección de NaNs en GPUs AMD mediante la sustitución de `torch.triu` por `masked_fill` en la máscara causal.
+5. **Estandarización de Logs:** Creación de `GEMINI.md` y unificación de logs con tiempo transcurrido `[HH:MM:SS]`.
 
-## Mejoras Implementadas (P0-P2 + P3 parcial)
-- **P0 Críticos:** Corregidos checkpoints, dependencias, .env, evaluación, generación de texto, KV-cache, configuración externa, integración de herramientas reales.
-- **P1 Importantes:** KV-cache para inferencia 5-10x más rápida, configuración externalizada con argparse/YAML, integración real con DuckDuckGo.
-- **P2 Calidad:** Suite de tests expandida (7 tests), gradient checkpointing opcional, logging framework con archivos.
-- **P3 Parcial:** Soporte LoRA implementado en `model/model.py` y `scripts/finetune.py`, con opción `--data_file` para elegir el dataset de fine-tuning.
+## Lecciones Aprendidas (MLOps)
+- **The Spacing Trap:** Los pre-tokenizers basados en `Whitespace` son insuficientes para LLMs; el formato ByteLevel es el único que garantiza una reconstrucción perfecta del texto.
+- **Hardware Bottleneck:** El bus PCIe y las capas de abstracción (DirectML) penalizan los modelos pequeños. A veces, "volver a la CPU" es la mayor optimización posible.
+- **Token IDs Incompatibility:** Cualquier cambio en el tokenizador invalida todos los checkpoints previos. El "idioma" interno de los pesos está atado al `tokenizer.json`.
 
-## El Resultado "The Parrot Effect"
-Al poner a prueba el modelo tras la Fase 3, presenciamos el efecto esperado y teorizado para un modelo de <20MB:
-- **Éxito Estructural:** El modelo adoptó rigurosamente la directriz del sistema. Generó sin dudar su token `<thought>`, justificó su incapacidad interna para resolver problemas factuales y escupió su llamada `<TOOL_CALL> search(...)`.
-- **Limitación Dimensional:** Dado que 12M de parámetros carecen de capacidad de retención de enciclopedia, al enfrentarse a hechos concretos (ej. "Penicilina"), intercaló semántica correcta con hechos cruzados ("Mount Everest", "Japan"). 
-- **Conclusión de Arquitectura:** El ensayo subraya que **el comportamiento abstracto (Razonamiento Lógico) es enseñable a escalas extremadamente bajas e independientes del conocimiento factual crudo (Retrieval)**. 
+## Métricas Actuales
+- **Modelo:** 12.46M Parámetros.
+- **Dispositivo:** CPU (Ryzen 7 8845HS).
+- **Dataset:** 305 Millones de tokens binarios.
+- **Pérdida (val_loss):** **1.74** (Lograda en 10,000 iteraciones).
 
-Este proyecto se consolida como el cimiento técnico ideal para la investigación superior (SOMA) sobre el "*Hipocampo Sintético*" y el "*Auto-LoRA*".
+---
 
-*Mission Accomplished.*
+## 🚀 Próximos Pasos
+1. **Validación Visual:** Comprobar la generación de texto en `chat.py` usando el nuevo checkpoint base.
+2. **Fine-Tuning Agéntico (Phase 2/3 v2):** Inyectar la lógica de búsqueda y razonamiento sobre el nuevo cerebro de 1.74 loss.
+3. **Escalamiento (Escala B):** Evaluar el paso a 50M de parámetros tras consolidar el modelo de 12M.
