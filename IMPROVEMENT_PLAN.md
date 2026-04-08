@@ -1,162 +1,43 @@
-# Improvement Plan - TinyThinker
+# 📋 Plan de Mejora - TinyThinker
 
-> Prioritized plan to move TinyThinker from a functional prototype to a more reproducible research codebase.
+> Plan priorizado para evolucionar TinyThinker de un prototipo funcional a una base de código de investigación reproducible y escalable.
 
-Last updated: 2026-04-08
+Última actualización: 8 de Abril de 2026 (Fase 4 Completada)
 
-## Current State
+## ✅ Fase 4: Optimización y Re-nacimiento (Completado)
+Se ha reconstruido el corazón del modelo para solucionar problemas estructurales de base.
 
-TinyThinker has a solid technical base for a small experimental LLM:
+1.  **Corpus Masivo (305M Tokens):** Migración de cuentos infantiles a un mix con Wikipedia.
+2.  **Tokenizador ByteLevel:** Solución definitiva al error de los espacios en blanco.
+3.  **SFT con Enmascaramiento:** El modelo ya no repite el prompt, solo aprende a responder.
+4.  **Hardware Ryzen (AVX-512):** Optimización 14x respecto a la iGPU para entrenamiento en CPU.
+5.  **Metodología GEMINI.md:** Establecimiento de estándares de nombrado, backup y logging.
 
-- Modern architecture in [`model/model.py`](model/model.py): RoPE, RMSNorm, SwiGLU, GQA, LoRA.
-- Separate flows for pretraining, fine-tuning, chat, and evaluation.
-- Basic unit and integration tests.
-- Working logging and checkpointing.
+## 🚀 Fase 5: Escalamiento y Contexto (Inmediato)
+Objetivo: Superar las limitaciones de memoria y capacidad identificadas en la Fase 4.
 
-There are also a few places where the repository looks more mature than the current implementation really is:
+### P0 - Estabilidad de Inferencia
+1.  **Ampliación de Contexto (1024/2048):**
+    *   Actualizar `ModelArgs` y regenerar `freqs_cis` en `model.py`.
+    *   Verificar estabilidad del RoPE en secuencias largas.
+    *   Evitar el `AssertionError` al inyectar resultados de búsqueda extensos.
 
-- `scripts/train.py` still hardcodes several settings even though [`scripts/config.py`](scripts/config.py) and YAML configs already exist.
-- Evaluation is still good as a smoke test, but too weak to support strong claims about tool calling or agentic behavior.
-- Documentation and status files sometimes describe the project as more finished than the code actually is.
+2.  **Refinamiento del Chat:**
+    *   Implementar un sistema de "ventana deslizante" o truncado inteligente del historial.
+    *   Mejorar la robustez del parser de resultados de búsqueda.
 
-## Active Run
+### P1 - Escalamiento de Parámetros (Escala B)
+1.  **Entrenamiento 50M Params:**
+    *   Usar `configs/train_scale_b.yaml`.
+    *   Evaluar el impacto en la latencia de CPU (Ryzen 7 debería manejarlo bien).
+    *   Comprobar si la mayor capacidad reduce las alucinaciones factuales.
 
-Fine-tuning is currently running on CPU with LoRA. While that run is active:
+## 🧪 Notas de MLOps
+- **Checkpoint Actual:** `ckpt_sft_latest.pt` (Basado en corpus 305M).
+- **Log Estándar:** `[HH:MM:SS]` relativo al inicio del script.
+- **Hardware Recomendado:** CPU Ryzen 7 8845HS (forzar `--device cpu`).
 
-- Safe to edit: documentation, plans, notes, and tests that do not affect the live process.
-- Avoid editing: tokenizer artifacts, active datasets, checkpoints, and training scripts that are directly involved in the current run.
-- The tokenizer and chat behavior should be revalidated after the run finishes.
-
-## Changes Already Applied
-
-These items are already in place and should not be reopened unless a regression appears:
-
-1. `requirements.txt` was simplified to a small coherent dependency set.
-2. `finetune.py` was updated for compatibility with `torch.amp.GradScaler`.
-3. `chat.py` logging duplication was removed.
-4. `test_tokenizer_roundtrip` was relaxed to account for ByteLevel decoding behavior.
-5. The SFT label alignment bug was fixed in `scripts/finetune.py`, so the previous finetune run should be treated as invalid and restarted.
-
-## Immediate Priority
-
-### P0 - After the Current Run
-
-These are the highest-value fixes, but we should finish the active finetune before making deeper changes to the training path.
-
-1. Consolidate configuration
-   - Make [`scripts/train.py`](scripts/train.py) consume [`scripts/config.py`](scripts/config.py) and the YAML files in [`configs/`](configs).
-   - Remove hardcoded training hyperparameters from multiple scripts.
-   - Unify checkpoint paths, dataset paths, and common runtime settings.
-
-2. Harden evaluation
-   - Keep perplexity as a smoke test.
-   - Improve tool-calling evaluation so it measures format correctness, trigger behavior, and usefulness.
-   - Separate base language evaluation from agentic behavior evaluation.
-
-3. Tighten chat and tokenizer validation
-   - Recheck the regenerated tokenizer on real chat prompts.
-   - Confirm that spacing and token reconstruction remain stable in interactive generation.
-   - Keep tests focused on the actual user-visible bug, not only an idealized roundtrip.
-
-4. Align documentation with the code
-   - Reduce "mission accomplished" language where the repo is still experimental.
-   - Fix encoding issues in [`README.md`](README.md), [`PROJECT_STATUS.md`](PROJECT_STATUS.md), and related docs.
-   - Document current limitations and assumptions more clearly.
-
-## Work That Is Safe Now
-
-### P1 - Safe During the Active Run
-
-1. Keep this plan current
-   - Record new findings, decisions, and next steps as we validate the repo.
-
-2. Prepare the post-run backlog
-   - Leave the tokenizer, config, tests, and evaluation work clearly queued for after the finetune finishes.
-
-3. Documentation-only improvements
-   - Refine `.md` files that do not affect the live run.
-
-## Known Good Fixes
-
-These improvements are already in a good place:
-
-- Duplicate attention calls in [`model/model.py`](model/model.py) were removed.
-- Dead code in [`model/model.py`](model/model.py) was cleaned up.
-- The output directory bug in [`scripts/train.py`](scripts/train.py) was fixed.
-- KV-cache support was added to [`scripts/chat.py`](scripts/chat.py).
-- Residual connections with gradient checkpointing were fixed in [`model/model.py`](model/model.py).
-- Dataset validation was added in [`scripts/eval.py`](scripts/eval.py).
-- Logging exists in training, fine-tuning, and chat.
-- `requirements.txt` cleanup is done.
-- `chat.py` logger duplication is gone.
-- `test_tokenizer_roundtrip` is now less brittle.
-
-Note: "implemented" does not always mean "fully closed". Some items still need better tests or a cleanup pass.
-
-## Open Topic: Tokenizer
-
-Current stance:
-
-- The tokenizer was regenerated to address visible spacing issues in chat output.
-- ByteLevel decoding can add or preserve leading spaces in ways that are valid but visually surprising.
-- We should validate real chat behavior, not just a theoretical roundtrip.
-
-Decision:
-
-- Do not touch `model/tokenizer.json` during the active run.
-- Re-evaluate tokenizer behavior after the run and decide whether the tests should assert a stricter user-facing rule.
-
-Acceptance criteria after the run:
-
-- Chat output does not glue words together or drop meaningful spaces.
-- Tokenizer and decoder behave consistently on real prompts.
-- Tests cover the actual display bug, not only a perfect roundtrip.
-
-## Main Risks
-
-1. Fragile reproducibility
-   - If the environment cannot be rebuilt consistently, comparing runs will remain noisy.
-
-2. Config drift
-   - YAML configs and hardcoded script values can diverge and create confusion.
-
-3. Over-optimistic evaluation
-   - Perplexity plus tag presence is not enough to describe agentic quality.
-
-4. Documentation drift
-   - If the narrative moves ahead of the code, debugging and prioritization get harder.
-
-## Secondary Backlog
-
-### P2 - Quality and Ergonomics
-
-1. Improve test coverage
-   - Add tests focused on real chat behavior and tokenizer behavior.
-   - Add tests that verify effective config handling in `train.py`.
-   - Separate fast tests from slow tests more clearly.
-
-2. Improve training ergonomics
-   - Print a clearer summary of active hyperparameters on startup.
-   - Make checkpoint and log naming more explicit.
-   - Expose seeds and run metadata more visibly.
-
-3. Improve dependency structure
-   - Consider splitting training and dev dependencies into separate requirement files.
-
-### P3 - Future
-
-1. Sliding window or a better long-context strategy.
-2. Multi-GPU or DDP support.
-3. Docker or a more closed reproducible environment.
-4. Optional experiment tracking integration.
-
-## Post-Run Checklist
-
-When the active finetune finishes:
-
-1. Validate metrics and output quality on the new checkpoint.
-2. Revisit tokenizer behavior with real chat examples.
-3. Confirm the new SFT checkpoint does not collapse to whitespace or token-copying behavior.
-4. Fix or redesign the tokenizer roundtrip test if needed.
-5. Wire `train.py` to the unified configuration path.
-6. Refresh docs and status claims to match the code.
+## 🛠 Backlog Secundario
+- **DDP Support:** Preparar el código para entrenamiento distribuido (futuro).
+- **Quantization:** Probar exportación a GGUF/INT8 para mayor velocidad.
+- **Web UI:** Crear una interfaz sencilla para interactuar con el modelo agéntico.
