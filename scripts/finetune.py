@@ -16,7 +16,7 @@ from model.model import TinyThinker, ModelArgs
 # Configuración SFT (Supervised Fine-Tuning)
 # -----------------
 DEFAULT_BATCH_SIZE = 4
-DEFAULT_SEQ_LEN = 512 # Aumentamos para capturar el ejemplo completo
+DEFAULT_SEQ_LEN = 1024 # Aumentamos para permitir búsquedas más ricas
 DEFAULT_MAX_ITERS = 1000
 DEFAULT_EVAL_INTERVAL = 100
 DEFAULT_EVAL_ITERS = 20
@@ -26,8 +26,8 @@ DEFAULT_GRAD_CLIP = 1.0
 DEFAULT_GRAD_ACCUM = 4
 
 # Paths por defecto
-BASE_CKPT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_base_corpus305M_v2.pt")
-OUT_CKPT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_sft_latest.pt")
+BASE_CKPT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_base_305M_ctx1024.pt")
+OUT_CKPT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_sft_ctx1024.pt")
 DATA_FILE_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "data", "tool_dataset_clean.json")
 TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json")
 

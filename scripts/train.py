@@ -18,7 +18,7 @@ from model.model import TinyThinker, ModelArgs
 # Configuración por Defecto
 # ----------------------------------
 DEFAULT_BATCH_SIZE = 16
-DEFAULT_SEQ_LEN = 256
+DEFAULT_SEQ_LEN = 1024
 DEFAULT_GRAD_ACCUM = 4
 DEFAULT_MAX_ITERS = 10000
 DEFAULT_LR = 1e-3
@@ -34,6 +34,7 @@ def parse_args():
     parser.add_argument('--resume', action='store_true', help='Reanudar desde el último checkpoint.')
     parser.add_argument('--max_iters', type=int, default=DEFAULT_MAX_ITERS, help='Número total de iteraciones.')
     parser.add_argument('--batch_size', type=int, default=DEFAULT_BATCH_SIZE, help='Tamaño de batch por micro-paso.')
+    parser.add_argument('--seq_len', type=int, default=DEFAULT_SEQ_LEN, help='Longitud de secuencia (ventana de contexto).')
     parser.add_argument('--grad_accum_steps', type=int, default=DEFAULT_GRAD_ACCUM, help='Pasos de acumulación de gradientes.')
     parser.add_argument('--lr', type=float, default=DEFAULT_LR, help='Learning rate máximo.')
     parser.add_argument('--use_gradient_checkpointing', action='store_true', help='Activar ahorro de RAM.')
@@ -92,9 +93,9 @@ def main():
 
     def get_batch(split='train'):
         data = train_data if split == 'train' else val_data
-        ix = torch.randint(len(data) - DEFAULT_SEQ_LEN, (args_cli.batch_size,))
-        x = torch.stack([torch.from_numpy((data[i:i+DEFAULT_SEQ_LEN]).astype(np.int64)) for i in ix])
-        y = torch.stack([torch.from_numpy((data[i+1:i+1+DEFAULT_SEQ_LEN]).astype(np.int64)) for i in ix])
+        ix = torch.randint(len(data) - args_cli.seq_len, (args_cli.batch_size,))
+        x = torch.stack([torch.from_numpy((data[i:i+args_cli.seq_len]).astype(np.int64)) for i in ix])
+        y = torch.stack([torch.from_numpy((data[i+1:i+1+args_cli.seq_len]).astype(np.int64)) for i in ix])
         if device == 'cuda':
             x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
         else:
@@ -109,7 +110,7 @@ def main():
     
     model_args = ModelArgs(
         dim=256, n_layers=6, n_heads=8, n_kv_heads=4,
-        vocab_size=16384, max_seq_len=DEFAULT_SEQ_LEN
+        vocab_size=16384, max_seq_len=args_cli.seq_len
     )
     model = TinyThinker(model_args)
     model.to(device)
@@ -191,7 +192,7 @@ DEVICE: {str(device).upper()}
 CPU THREADS: {torch.get_num_threads()}
 --------------- HYPERPARAMS -----------
 batch_size: {args_cli.batch_size}
-seq_len: {DEFAULT_SEQ_LEN}
+seq_len: {args_cli.seq_len}
 grad_accum_steps: {args_cli.grad_accum_steps}
 max_iters: {args_cli.max_iters}
 learning_rate: {args_cli.lr}
