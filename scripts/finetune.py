@@ -6,275 +6,178 @@ import torch
 import torch.nn.functional as F
 from tokenizers import Tokenizer
 import contextlib
-import logging
+import datetime
+import time
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from model.model import TinyThinker, ModelArgs
 
 # -----------------
-# Configuración CPT (Continual Pre-Training / Fine-Tuning)
+# Configuración SFT (Supervised Fine-Tuning)
 # -----------------
-batch_size = 4
-seq_len = 256
-max_iters = 500  # Con pocos datos no hacen falta muchas iteraciones
-eval_interval = 50
-eval_iters = 10
-learning_rate = 3e-5  # Muy bajo para no "destruir" la gramática recién aprendida
-weight_decay = 1e-1
-grad_clip = 1.0
-grad_accum_steps = 4
+DEFAULT_BATCH_SIZE = 4
+DEFAULT_SEQ_LEN = 512 # Aumentamos para capturar el ejemplo completo
+DEFAULT_MAX_ITERS = 1000
+DEFAULT_EVAL_INTERVAL = 100
+DEFAULT_EVAL_ITERS = 20
+DEFAULT_LR = 5e-5
+DEFAULT_WEIGHT_DECAY = 1e-1
+DEFAULT_GRAD_CLIP = 1.0
+DEFAULT_GRAD_ACCUM = 4
 
-# Ajuste automático del dispositivo (igual que tu mejora en train.py)
-device = 'cpu'
-try:
-    import torch_directml
-    device = torch_directml.device()   # Equivalente a 'dml:0'
-    print(f"[device] DirectML activo: {device}")
-except ImportError:
-    if torch.cuda.is_available():
-        device = 'cuda'
-    elif getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
-        device = 'mps'
-    print(f"[device] DirectML no disponible, usando: {device}")
-
-# Detectar si DirectML está activo
-_is_dml = str(device).startswith('dml') if not isinstance(device, str) else False
-
-if _is_dml:
-    # DirectML no soporta autocast — usar fp32 puro
-    import contextlib
-    ctx = contextlib.nullcontext()
-    ptdtype = torch.float32
-elif device == 'cuda':
-    ptdtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-    ctx = torch.amp.autocast(device_type='cuda', dtype=ptdtype)
-elif device == 'cpu':
-    ptdtype = torch.bfloat16  # AVX-512 BF16 nativo en Zen 4
-    ctx = torch.amp.autocast(device_type='cpu', dtype=ptdtype)
-else:
-    ptdtype = torch.float32
-    import contextlib
-    ctx = contextlib.nullcontext()
-
-scaler = torch.amp.GradScaler('cuda', enabled=(ptdtype == torch.float16 and device == 'cuda'))
-
-# ==========================================
-# GESTIÓN SEGURA DE CHECKPOINTS
-# ==========================================
-BASE_CKPT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_best.pt")
-OUT_CKPT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_finetuned.pt")
-DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "tool_dataset_real.json")
+# Paths por defecto
+BASE_CKPT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_base_300M_v2.pt")
+OUT_CKPT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_finetuned.pt")
+DATA_FILE_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "data", "tool_dataset_clean.json")
 TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json")
 
-# Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join(os.path.dirname(__file__), "..", "logs", "finetune.log")),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
-
-def load_and_tokenize_dataset():
-    if not os.path.exists(DATA_FILE):
-        logger.error(f"Error: No se encontró {DATA_FILE}")
+def load_sft_dataset(data_file, tokenizer, max_seq_len):
+    """
+    Carga el dataset y devuelve pares (input_ids, target_mask).
+    La máscara será -100 para los tokens del prompt y el ID real para la respuesta.
+    """
+    if not os.path.exists(data_file):
+        print(f"Error: No se encontró {data_file}")
         sys.exit(1)
         
-    logger.info("Cargando tokenizador y transcribiendo dataset sintético a memoria...")
-    tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
-    
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
+    with open(data_file, "r", encoding="utf-8") as f:
         dataset = json.load(f)
         
-    # Como son pocos datos (50-500 JSONs), los metemos en memoria de golpe (sin memmap)
-    all_ids = []
-    for example in dataset:
-        tokens = tokenizer.encode(example["text"]).ids
-        all_ids.extend(tokens)
-        
-    # Convertir a un solo tensor maestro
-    data_tensor = torch.tensor(all_ids, dtype=torch.long)
-    logger.info(f"Dataset de Fine-Tuning procesado: {len(data_tensor)} tokens listos para alinear a TinyThinker.")
-    return data_tensor
+    processed_examples = []
+    assistant_token_id = tokenizer.encode("Assistant:").ids
+    # Buscamos una secuencia común que identifique el inicio de la respuesta
+    # Nota: En ByteLevel BPE "Assistant:" puede tokenizarse de varias formas según el contexto.
+    # Usaremos una estrategia más robusta buscando el ID del último token de la cabecera.
 
-def get_batch(data):
-    ix = torch.randint(len(data) - seq_len, (batch_size,))
-    x = torch.stack([data[i:i+seq_len] for i in ix])
-    y = torch.stack([data[i+1:i+1+seq_len] for i in ix])
+    print(f"Procesando {len(dataset)} ejemplos para SFT...")
+    
+    for example in dataset:
+        full_text = example["text"]
+        if "Assistant:" not in full_text: continue
+        
+        # Dividir en Prompt y Respuesta
+        parts = full_text.split("Assistant:")
+        prompt_text = parts[0] + "Assistant:"
+        response_text = parts[1]
+        
+        prompt_ids = tokenizer.encode(prompt_text).ids
+        response_ids = tokenizer.encode(response_text).ids
+        
+        input_ids = (prompt_ids + response_ids)[:max_seq_len]
+        # Target: Igual que input_ids pero con -100 en la parte del prompt
+        targets = ([-100] * len(prompt_ids) + response_ids)[:max_seq_len]
+        
+        # Padding manual hasta max_seq_len
+        padding_len = max_seq_len - len(input_ids)
+        if padding_len > 0:
+            input_ids += [0] * padding_len
+            targets += [-100] * padding_len
+            
+        processed_examples.append({
+            "input_ids": torch.tensor(input_ids, dtype=torch.long),
+            "labels": torch.tensor(targets, dtype=torch.long)
+        })
+        
+    return processed_examples
+
+def get_batch_sft(examples, bsz, device):
+    ix = torch.randint(0, len(examples), (bsz,))
+    x = torch.stack([examples[i]["input_ids"] for i in ix])
+    y = torch.stack([examples[i]["labels"] for i in ix])
     if device == 'cuda':
         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
     else:
         x, y = x.to(device), y.to(device)
     return x, y
 
-
 def parse_args():
-    parser = argparse.ArgumentParser(description="Fine-tune TinyThinker con soporte LoRA")
-    parser.add_argument('--lora_r', type=int, default=0, help='Rank de LoRA. 0 = deshabilitado.')
-    parser.add_argument('--lora_alpha', type=float, default=16.0, help='Escala de LoRA.')
-    parser.add_argument('--lora_dropout', type=float, default=0.0, help='Dropout de LoRA.')
-    parser.add_argument('--data_file', type=str, default=DATA_FILE, help='Ruta del dataset JSON para fine-tuning')
-    parser.add_argument('--batch_size', type=int, default=batch_size, help='Batch size para fine-tuning')
-    parser.add_argument('--seq_len', type=int, default=seq_len, help='Longitud de secuencia para fine-tuning')
-    parser.add_argument('--max_iters', type=int, default=max_iters, help='Número máximo de iteraciones')
-    parser.add_argument('--eval_interval', type=int, default=eval_interval, help='Intervalo de evaluación')
-    parser.add_argument('--eval_iters', type=int, default=eval_iters, help='Evaluación con cuántos pasos')
-    parser.add_argument('--learning_rate', type=float, default=learning_rate, help='LR para fine-tuning')
+    parser = argparse.ArgumentParser(description="TinyThinker SFT (Supervised Fine-Tuning)")
+    parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'dml', 'mps'], help='Dispositivo.')
+    parser.add_argument('--lora_r', type=int, default=16, help='Rank de LoRA.')
+    parser.add_argument('--lora_alpha', type=float, default=32.0, help='Escala de LoRA.')
+    parser.add_argument('--max_iters', type=int, default=DEFAULT_MAX_ITERS, help='Iteraciones.')
+    parser.add_argument('--learning_rate', type=float, default=DEFAULT_LR, help='LR.')
+    parser.add_argument('--batch_size', type=int, default=DEFAULT_BATCH_SIZE, help='Batch size.')
     return parser.parse_args()
-
 
 def freeze_base_weights(model):
     for name, param in model.named_parameters():
-        if 'lora_' not in name:
+        if 'lora_' in name or 'tok_embeddings' in name or 'output' in name:
+            param.requires_grad = True
+        else:
             param.requires_grad = False
 
-@torch.no_grad()
-def estimate_loss(model, data):
-    model.eval()
-    losses = torch.zeros(eval_iters)
-    for k in range(eval_iters):
-        X, Y = get_batch(data)
-        with ctx:
-            logits = model(X)
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), Y.view(-1))
-        losses[k] = loss.item()
-    model.train()
-    return losses.mean().item()
-
 def main():
-    global BASE_CKPT
-    if not os.path.exists(BASE_CKPT):
-        # Si no existe el _best (por usar el script antiguo), buscamos el ckpt genérico rotativo
-        BASE_CKPT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt.pt")
-        if not os.path.exists(BASE_CKPT):
-            logger.error("❌ Error: No hay modelo base. Debes finalizar la Fase 1 primero.")
-            sys.exit(1)
-            
     cmd_args = parse_args()
-    global batch_size, seq_len, max_iters, eval_interval, eval_iters, learning_rate
-    batch_size = cmd_args.batch_size
-    seq_len = cmd_args.seq_len
-    max_iters = cmd_args.max_iters
-    eval_interval = cmd_args.eval_interval
-    eval_iters = cmd_args.eval_iters
-    learning_rate = cmd_args.learning_rate
-
-    print(f"Cargando Mente Base Mestra desde: {os.path.basename(BASE_CKPT)}")
-    checkpoint = torch.load(BASE_CKPT, map_location='cpu', weights_only=False)
-    args = checkpoint['args']
-    args.lora_r = cmd_args.lora_r
-    args.lora_alpha = cmd_args.lora_alpha
-    args.lora_dropout = cmd_args.lora_dropout
     
-    global DATA_FILE
-    DATA_FILE = cmd_args.data_file
-
-    model = TinyThinker(args)
+    # 1. Hardware
+    device = 'cpu'
+    if cmd_args.device == 'dml':
+        import torch_directml
+        device = torch_directml.device()
+    elif cmd_args.device == 'cuda' and torch.cuda.is_available():
+        device = 'cuda'
+    
+    # 2. Modelo
+    print(f"Cargando base: {os.path.basename(BASE_CKPT_DEFAULT)}")
+    checkpoint = torch.load(BASE_CKPT_DEFAULT, map_location='cpu', weights_only=False)
+    model_args = checkpoint['args']
+    model_args.lora_r = cmd_args.lora_r
+    model_args.lora_alpha = cmd_args.lora_alpha
+    
+    model = TinyThinker(model_args)
     model.load_state_dict(checkpoint['model'], strict=False)
     model.to(device)
+    freeze_base_weights(model)
 
-    # Setup de Logs estÃ¡ndar
-    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
-    os.makedirs(log_dir, exist_ok=True)
-    start_date = datetime.datetime.now()
-    log_file = os.path.join(log_dir, f"finetune_{start_date.strftime('%Y%m%d_%H%M%S')}.log")
+    # 3. Dataset SFT con Máscara
+    tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
+    dataset = load_sft_dataset(DATA_FILE_DEFAULT, tokenizer, DEFAULT_SEQ_LEN)
     
-    global_start_time = time.time()
+    # 4. Logs
+    log_file = os.path.join("logs", f"sft_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+    start_time = time.time()
     def t_print(msg):
-        elapsed = time.time() - global_start_time
-        elapsed_str = time.strftime("%H:%M:%S", time.gmtime(elapsed))
-        full_msg = f"[{elapsed_str}] {msg}"
-        print(full_msg)
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(full_msg + "\n")
+        elapsed = time.strftime("%H:%M:%S", time.gmtime(time.time() - start_time))
+        full = f"[{elapsed}] {msg}"
+        print(full)
+        with open(log_file, "a") as f: f.write(full + "\n")
 
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    
-    header = f"""========================================
-DATE: {start_date.strftime('%Y-%m-%d %H:%M:%S')}
-DEVICE: {str(device).upper()}
-CPU THREADS: {torch.get_num_threads()}
---------------- HYPERPARAMS -----------
-batch_size: {batch_size}
-seq_len: {seq_len}
-grad_accum_steps: {grad_accum_steps}
-max_iters: {max_iters}
-learning_rate: {learning_rate}
---------------- MODEL PARAMS ----------
-dim: {args.dim}
-n_layers: {args.n_layers}
-n_heads: {args.n_heads}
-vocab_size: {args.vocab_size}
-TOTAL PARAMS: {total_params / 1e6:.2f}M
-TRAINABLE PARAMS: {trainable_params / 1e6:.2f}M
-========================================"""
-    t_print(header)
+    t_print(f"SFT Iniciado | Device: {device} | Params: {sum(p.numel() for p in model.parameters() if p.requires_grad)/1e6:.2f}M")
+    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=cmd_args.learning_rate)
 
-    if cmd_args.lora_r > 0:
-        freeze_base_weights(model)
-        t_print(f"LoRA activado: r={cmd_args.lora_r}, alpha={cmd_args.lora_alpha}, dropout={cmd_args.lora_dropout}")
-        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        t_print(f"Parametros entrenables LoRA: {trainable}")
-        optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=learning_rate, weight_decay=weight_decay)
-    else:
-        t_print(f"Preparando Optimizador (Low Learning Rate: {learning_rate})...")
-        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    
-    data = load_and_tokenize_dataset()
-    
-    t_print("Iniciando Fase 2/3: Inyeccion de Logica y Tool-Calling...")
-    
+    # 5. Bucle
     t0 = time.time()
-    for iter_num in range(1, max_iters + 1):
-        if iter_num % eval_interval == 0:
-            val_loss = estimate_loss(model, data)
-            t_print(f"✨ [ITER {iter_num}] Error de Formato Logico: {val_loss:.4f} | Guardando Especializacion...")
-            ckpt = {
-                'model': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'args': args,
-                'val_loss': val_loss
-            }
-            torch.save(ckpt, OUT_CKPT)
-            
-        # Acumulación de gradientes
-        optimizer.zero_grad(set_to_none=True)
-        for _ in range(grad_accum_steps):
-            X, Y = get_batch(data)
-            with ctx:
+    for iter_num in range(1, cmd_args.max_iters + 1):
+        if iter_num % DEFAULT_EVAL_INTERVAL == 0:
+            model.eval()
+            with torch.no_grad():
+                X, Y = get_batch_sft(dataset, DEFAULT_EVAL_ITERS, device)
                 logits = model(X)
+                # CrossEntropy ignora automáticamente el índice -100
                 loss = F.cross_entropy(logits.view(-1, logits.size(-1)), Y.view(-1))
-                loss = loss / grad_accum_steps
-                
-            if scaler is not None and scaler.is_enabled():
-                scaler.scale(loss).backward()
-            else:
-                loss.backward()
-                
-        if grad_clip != 0.0:
-            if scaler is not None and scaler.is_enabled():
-                scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-            
-        if scaler is not None and scaler.is_enabled():
-            scaler.step(optimizer)
-            scaler.update()
-        else:
-            optimizer.step()
-            
-        if iter_num % 10 == 0:
-            t1 = time.time()
-            dt = t1 - t0
-            t0 = t1
-            t_print(f"iter {iter_num:4d} | fine-tune loss {loss.item()*grad_accum_steps:.4f} | time {dt:.2f}s")
+                t_print(f"Iter {iter_num} | val_loss {loss.item():.4f} | Guardando...")
+                torch.save({'model': model.state_dict(), 'args': model_args, 'iter_num': iter_num}, OUT_CKPT_DEFAULT)
+            model.train()
 
-    t_print("Especializacion Completada!")
-    print(f"El modelo original sigue intacto en '{os.path.basename(BASE_CKPT)}'")
-    print(f"El NUEVO modelo con 'Tool-Calling' ha sido guardado como: '{os.path.basename(OUT_CKPT)}'")
-    print("\nPara interactuar con él, ve a 'scripts/chat.py' y asegúrate de cambiar la ruta de CKPT_PATH a 'ckpt_finetuned.pt'")
+        optimizer.zero_grad()
+        for _ in range(DEFAULT_GRAD_ACCUM):
+            X, Y = get_batch_sft(dataset, cmd_args.batch_size, device)
+            logits = model(X)
+            # Solo se calcula el error en los tokens de la respuesta (donde Y != -100)
+            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), Y.view(-1))
+            loss = loss / DEFAULT_GRAD_ACCUM
+            loss.backward()
+        
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
+
+        if iter_num % 10 == 0:
+            dt = time.time() - t0
+            t0 = time.time()
+            t_print(f"iter {iter_num:4d} | loss {loss.item()*DEFAULT_GRAD_ACCUM:.4f} | time {dt:.2f}s")
+
+    t_print("SFT Completado!")
 
 if __name__ == '__main__':
     main()

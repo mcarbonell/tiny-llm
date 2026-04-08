@@ -113,27 +113,36 @@ def calculate_perplexity(model, tokenizer, dataset_path, device='cpu', seq_len=2
 def generate_text(model, tokenizer, input_ids, max_new_tokens=50, temperature=1.0, device='cpu', top_k=40):
     """Genera texto con KV-cache para eficiencia."""
     model.eval()
-    generated_tokens = input_ids.squeeze().tolist()  # Asumir (1, seq) -> list
+    prompt_tokens = torch.as_tensor(input_ids, dtype=torch.long, device=device).view(-1).tolist()
+    if len(prompt_tokens) == 0:
+        return torch.empty((1, 0), dtype=torch.long, device=device)
+
+    generated_tokens = list(prompt_tokens)
+    x = torch.tensor([generated_tokens], dtype=torch.long, device=device)
     past_key_values = None
     
     with torch.no_grad():
+        logits, past_key_values = model(x, use_cache=True)
+        next_token_logits = logits[:, -1, :] / temperature
+        if top_k is not None:
+            v, _ = torch.topk(next_token_logits, min(top_k, next_token_logits.size(-1)))
+            next_token_logits[next_token_logits < v[:, [-1]]] = -float('Inf')
+
         for _ in range(max_new_tokens):
-            input_tensor = torch.tensor([generated_tokens[-1]], dtype=torch.long, device=device).unsqueeze(0)  # (1, 1)
+            probs_cpu = F.softmax(next_token_logits, dim=-1).cpu()
+            next_token = torch.multinomial(probs_cpu, 1).to(device).item()
+            generated_tokens.append(next_token)
+            input_tensor = torch.tensor([[next_token]], dtype=torch.long, device=device)
             outputs = model(input_tensor, past_key_values=past_key_values, use_cache=True)
             if isinstance(outputs, tuple):
                 logits, past_key_values = outputs
             else:
                 logits = outputs
                 past_key_values = None
-            
             next_token_logits = logits[:, -1, :] / temperature
             if top_k is not None:
                 v, _ = torch.topk(next_token_logits, min(top_k, next_token_logits.size(-1)))
                 next_token_logits[next_token_logits < v[:, [-1]]] = -float('Inf')
-            
-            probs_cpu = F.softmax(next_token_logits, dim=-1).cpu()
-            next_token = torch.multinomial(probs_cpu, 1).to(device).item()
-            generated_tokens.append(next_token)
     
     return torch.tensor(generated_tokens, dtype=torch.long).unsqueeze(0)  # Devolver (1, seq)
 

@@ -156,8 +156,10 @@ class Attention(nn.Module):
 
         if past_key_value is not None:
             past_key, past_value = past_key_value
-            xk = torch.cat([past_key, xk], dim=1)
-            xv = torch.cat([past_value, xv], dim=1)
+            # K/V are shaped as (batch, heads, seq, head_dim) after transpose.
+            # Cache must be concatenated along the sequence dimension.
+            xk = torch.cat([past_key, xk], dim=2)
+            xv = torch.cat([past_value, xv], dim=2)
 
         # Atención por producto escalar (escalada y con máscara causal)
         scores = torch.matmul(xq, xk.transpose(2, 3)) / math.sqrt(self.head_dim)
@@ -186,7 +188,7 @@ class TransformerBlock(nn.Module):
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.use_checkpoint = False  # Toggle para gradient checkpointing
 
-    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: torch.Tensor, past_key_value=None):
+    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: torch.Tensor, past_key_value=None, use_cache: bool = False):
         # [FIX BUG-A] Llamada única a attention — capturamos (output, new_kv) de una vez.
         # Esto evita el doble cómputo que existía cuando past_key_value is not None.
         attn_out, new_kv = self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)
@@ -201,7 +203,7 @@ class TransformerBlock(nn.Module):
             h = x + attn_out
             out = h + self.feed_forward(self.ffn_norm(h))
 
-        if past_key_value is not None:
+        if use_cache or past_key_value is not None:
             return out, new_kv
         return out
 
@@ -228,7 +230,10 @@ class TinyThinker(nn.Module):
     def forward(self, tokens: torch.Tensor, past_key_values=None, use_cache=False):
         bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
-        freqs_cis = self.freqs_cis[:seqlen]
+        past_len = 0
+        if past_key_values:
+            past_len = past_key_values[0][0].shape[2]
+        freqs_cis = self.freqs_cis[past_len:past_len + seqlen]
 
         # Máscara causal para entrenamiento autorregresivo
         mask = None
@@ -240,7 +245,7 @@ class TinyThinker(nn.Module):
         past_key_values_out = []
         for i, layer in enumerate(self.layers):
             past_kv = past_key_values[i] if past_key_values else None
-            layer_out = layer(h, freqs_cis, mask, past_kv)
+            layer_out = layer(h, freqs_cis, mask, past_kv, use_cache=use_cache)
             if isinstance(layer_out, tuple):
                 h, past_kv_out = layer_out
                 past_key_values_out.append(past_kv_out)

@@ -1,181 +1,160 @@
 # Improvement Plan - TinyThinker
 
-> Plan de mejoras priorizado para llevar TinyThinker de prototipo funcional a codebase de investigacion mas solida y reproducible.
+> Prioritized plan to move TinyThinker from a functional prototype to a more reproducible research codebase.
 
-Ultima actualizacion: 2026-04-06
+Last updated: 2026-04-08
 
-## Estado actual
+## Current State
 
-TinyThinker ya tiene una base tecnica buena para un proyecto pequeno:
+TinyThinker has a solid technical base for a small experimental LLM:
 
-- Arquitectura moderna en [`model/model.py`](model/model.py): RoPE, RMSNorm, SwiGLU, GQA, LoRA.
-- Pipeline separado para pretraining, fine-tuning, chat y evaluacion.
-- Tests unitarios e integracion basica.
-- Logging y checkpoints funcionales.
+- Modern architecture in [`model/model.py`](model/model.py): RoPE, RMSNorm, SwiGLU, GQA, LoRA.
+- Separate flows for pretraining, fine-tuning, chat, and evaluation.
+- Basic unit and integration tests.
+- Working logging and checkpointing.
 
-Tambien hay varias areas donde el repo todavia da mas sensacion de madurez de la que garantiza el estado real del codigo:
+There are also a few places where the repository looks more mature than the current implementation really is:
 
-- ~~`requirements.txt` esta sobrecargado y tiene versiones duplicadas/conflictivas.~~ **FIXED 2026-04-06**
-- La capa de configuracion existe, pero `scripts/train.py` sigue bastante hardcodeado.
-- La evaluacion actual es util como smoke test, pero todavia floja para sostener claims fuertes.
-- Parte de la documentacion y del plan anterior marcaban como "completado" cosas que aun necesitan consolidacion.
+- `scripts/train.py` still hardcodes several settings even though [`scripts/config.py`](scripts/config.py) and YAML configs already exist.
+- Evaluation is still good as a smoke test, but too weak to support strong claims about tool calling or agentic behavior.
+- Documentation and status files sometimes describe the project as more finished than the code actually is.
 
-## Run actual: pretrain 2026-04-06_22-43-01
+## Active Run
 
-Estado a las ~42 min de entrenamiento (iter 60/5000):
+Fine-tuning is currently running on CPU with LoRA. While that run is active:
 
-- Device: PRIVATEUSEONE:0 (DirectML)
-- Loss: 9.84 → 6.70 (buena caida, convergencia normal)
-- Velocidad: ~490s/iter → estimacion ~68h para 5000 iters
-- Params: 16.65M (dim=256, 6 layers, 8 heads)
-- Dataset: 305.64M tokens mapeados en memmap
+- Safe to edit: documentation, plans, notes, and tests that do not affect the live process.
+- Avoid editing: tokenizer artifacts, active datasets, checkpoints, and training scripts that are directly involved in the current run.
+- The tokenizer and chat behavior should be revalidated after the run finishes.
 
-Observacion: DirectML va significativamente mas lento que CPU BF16 en Zen 4.
-Si el run se queda corto de tiempo, considerar volver a CPU puro con `torch.amp.autocast('cpu', dtype=torch.bfloat16)`.
+## Changes Already Applied
 
-## Regla operativa durante el retrain actual
+These items are already in place and should not be reopened unless a regression appears:
 
-Mientras siga corriendo el entrenamiento actual:
+1. `requirements.txt` was simplified to a small coherent dependency set.
+2. `finetune.py` was updated for compatibility with `torch.amp.GradScaler`.
+3. `chat.py` logging duplication was removed.
+4. `test_tokenizer_roundtrip` was relaxed to account for ByteLevel decoding behavior.
 
-- Si se puede editar: documentacion, planes, notas, tests no usados por el run.
-- No tocar: `model/tokenizer.json`, `scripts/train.py`, datasets activos, checkpoints o artefactos del run en curso.
-- El tema del tokenizer se revisa y corrige formalmente cuando termine este pretraining.
+## Immediate Priority
 
-## Cambios aplicados 2026-04-06 (safe durante entrenamiento)
+### P0 - After the Current Run
 
-Estas mejoras ya se aplicaron sin tocar el run activo:
+These are the highest-value fixes, but we should finish the active finetune before making deeper changes to the training path.
 
-1. **`requirements.txt` limpio**: De ~120 lineas con duplicados a ~15 deps reales.
-2. **`finetune.py` scaler fixed**: `torch.cuda.amp.GradScaler` → `torch.amp.GradScaler('cuda', ...)` para compatibilidad CPU.
-3. **`chat.py` logger duplicado eliminado**: 3 declaraciones de `logger` reducidas a 1.
-4. **`test_tokenizer_roundtrip` robustecido**: Ahora usa `.strip()` y multiples test strings en vez de igualdad exacta.
+1. Consolidate configuration
+   - Make [`scripts/train.py`](scripts/train.py) consume [`scripts/config.py`](scripts/config.py) and the YAML files in [`configs/`](configs).
+   - Remove hardcoded training hyperparameters from multiple scripts.
+   - Unify checkpoint paths, dataset paths, and common runtime settings.
 
-## Prioridad inmediata
+2. Harden evaluation
+   - Keep perplexity as a smoke test.
+   - Improve tool-calling evaluation so it measures format correctness, trigger behavior, and usefulness.
+   - Separate base language evaluation from agentic behavior evaluation.
 
-### P0 - Despues del retrain actual
+3. Tighten chat and tokenizer validation
+   - Recheck the regenerated tokenizer on real chat prompts.
+   - Confirm that spacing and token reconstruction remain stable in interactive generation.
+   - Keep tests focused on the actual user-visible bug, not only an idealized roundtrip.
 
-Estas son las mejoras con mejor retorno ahora mismo, pero las dejamos para cuando termine el entrenamiento en curso.
+4. Align documentation with the code
+   - Reduce "mission accomplished" language where the repo is still experimental.
+   - Fix encoding issues in [`README.md`](README.md), [`PROJECT_STATUS.md`](PROJECT_STATUS.md), and related docs.
+   - Document current limitations and assumptions more clearly.
 
-1. ~~Limpiar dependencias y reproducibilidad~~ **DONE**
-   - ~~Rehacer [`requirements.txt`](requirements.txt) con un set minimo y coherente.~~
-   - ~~Eliminar duplicados y versiones incompatibles.~~
-   - Separar, si hace falta, dependencias de entrenamiento, tooling y experimentacion.
+## Work That Is Safe Now
 
-2. Consolidar configuracion real
-   - Hacer que [`scripts/train.py`](scripts/train.py) use de verdad [`scripts/config.py`](scripts/config.py) y los YAML de [`configs/`](configs).
-   - Evitar hiperparametros hardcodeados en multiples scripts.
-   - Unificar paths, checkpoint dir y parametros comunes.
+### P1 - Safe During the Active Run
 
-3. Cerrar el tema tokenizer/chat
-   - Validar el tokenizer regenerado contra casos reales de chat.
-   - ~~Revisar el test de roundtrip en [`tests/test_model.py`](tests/test_model.py) para que compruebe el comportamiento correcto, no una igualdad demasiado estricta.~~ **DONE**
-   - Confirmar que el bug visual de espacios en el chat no reaparece.
+1. Keep this plan current
+   - Record new findings, decisions, and next steps as we validate the repo.
 
-4. Endurecer evaluacion
-   - Mantener perplexity como smoke test.
-   - Mejorar tool-calling accuracy para medir formato correcto, activacion correcta y contenido util, no solo presencia de la etiqueta `<TOOL_CALL>`.
-   - Separar evaluacion de lenguaje base de evaluacion de comportamiento agéntico.
+2. Prepare the post-run backlog
+   - Leave the tokenizer, config, tests, and evaluation work clearly queued for after the finetune finishes.
 
-5. Ajustar documentacion y claims
-   - Bajar el tono de "mission accomplished" en docs donde haga falta.
-   - Arreglar problemas de encoding en [`README.md`](README.md), [`PROJECT_STATUS.md`](PROJECT_STATUS.md) y docs relacionadas.
-   - Documentar mejor limitaciones y supuestos experimentales.
+3. Documentation-only improvements
+   - Refine `.md` files that do not affect the live run.
 
-## Trabajo que si podemos hacer ya
+## Known Good Fixes
 
-### P1 - Seguro durante el entrenamiento
+These improvements are already in a good place:
 
-1. ~~Mantener este plan actualizado~~ **DONE**
-   - ~~Registrar aqui cambios de criterio, decisiones y hallazgos del retrain.~~
+- Duplicate attention calls in [`model/model.py`](model/model.py) were removed.
+- Dead code in [`model/model.py`](model/model.py) was cleaned up.
+- The output directory bug in [`scripts/train.py`](scripts/train.py) was fixed.
+- KV-cache support was added to [`scripts/chat.py`](scripts/chat.py).
+- Residual connections with gradient checkpointing were fixed in [`model/model.py`](model/model.py).
+- Dataset validation was added in [`scripts/eval.py`](scripts/eval.py).
+- Logging exists in training, fine-tuning, and chat.
+- `requirements.txt` cleanup is done.
+- `chat.py` logger duplication is gone.
+- `test_tokenizer_roundtrip` is now less brittle.
 
-2. Preparar backlog post-retrain
-   - Dejar identificadas las tareas de tokenizer, tests, configuracion y evaluacion para ejecutarlas al terminar.
+Note: "implemented" does not always mean "fully closed". Some items still need better tests or a cleanup pass.
 
-3. Revisiones de documentacion no operativa
-   - Mejorar texto, estructura y prioridades en documentos `.md` que no afecten al run actual.
+## Open Topic: Tokenizer
 
-## Bugs y mejoras ya aterrizadas
+Current stance:
 
-Estas mejoras parecen correctamente encaminadas y no hace falta reabrirlas salvo regresion:
-
-- Fix de doble llamada a `attention()` en [`model/model.py`](model/model.py).
-- Limpieza de dead code en [`model/model.py`](model/model.py).
-- Arreglo de `out_dir` en [`scripts/train.py`](scripts/train.py).
-- Uso de KV-cache en [`scripts/chat.py`](scripts/chat.py).
-- Fix de residual connection con gradient checkpointing en [`model/model.py`](model/model.py).
-- Validacion basica de dataset en [`scripts/eval.py`](scripts/eval.py).
-- Logging basico en entrenamiento, fine-tuning y chat.
-- ~~Fix de `scaler` en [`scripts/finetune.py`](scripts/finetune.py) para compatibilidad CPU.~~ **DONE 2026-04-06**
-- ~~Limpieza de `requirements.txt`.~~ **DONE 2026-04-06**
-- ~~Fix de logger duplicado en [`scripts/chat.py`](scripts/chat.py).~~ **DONE 2026-04-06**
-- ~~Fix de `test_tokenizer_roundtrip`.~~ **DONE 2026-04-06**
-
-Nota: "implementado" no siempre significa "cerrado del todo". Algunas mejoras siguen necesitando consolidacion con mejores tests o con una pasada de limpieza.
-
-## Tema abierto: tokenizer
-
-Estado a 2026-04-06:
-
-- El tokenizer fue regenerado para corregir problemas visibles de espacios en el chat.
-- ~~El test `test_tokenizer_roundtrip` falla porque `decode()` devuelve un espacio inicial extra.~~ **FIXED: test ahora usa .strip()**
-- Ese fallo puede ser compatible con un tokenizer ByteLevel sano; no implica por si solo que el tokenizer este roto.
+- The tokenizer was regenerated to address visible spacing issues in chat output.
+- ByteLevel decoding can add or preserve leading spaces in ways that are valid but visually surprising.
+- We should validate real chat behavior, not just a theoretical roundtrip.
 
 Decision:
 
-- No tocar el tokenizer durante el retrain actual.
-- Revisar el test despues del run y redefinirlo segun el comportamiento realmente deseado en inferencia interactiva.
+- Do not touch `model/tokenizer.json` during the active run.
+- Re-evaluate tokenizer behavior after the run and decide whether the tests should assert a stricter user-facing rule.
 
-Criterio de aceptacion post-retrain:
+Acceptance criteria after the run:
 
-- El chat no pega palabras ni pierde espacios relevantes.
-- El tokenizer y el decoder se comportan de forma consistente en prompts reales.
-- Los tests cubren el bug real de visualizacion, no solo un roundtrip idealizado.
+- Chat output does not glue words together or drop meaningful spaces.
+- Tokenizer and decoder behave consistently on real prompts.
+- Tests cover the actual display bug, not only a perfect roundtrip.
 
-## Riesgos tecnicos principales
+## Main Risks
 
-1. Reproducibilidad fragil
-   - Si el entorno no se reconstruye de forma consistente, sera dificil comparar runs.
+1. Fragile reproducibility
+   - If the environment cannot be rebuilt consistently, comparing runs will remain noisy.
 
 2. Config drift
-   - Tener config declarada en YAML pero parametros activos hardcodeados en scripts puede producir confusion experimental.
+   - YAML configs and hardcoded script values can diverge and create confusion.
 
-3. Evaluacion optimista
-   - Medir solo perplexity y presencia de tags puede sobreestimar el progreso real.
+3. Over-optimistic evaluation
+   - Perplexity plus tag presence is not enough to describe agentic quality.
 
-4. Documentacion desalineada
-   - Si la narrativa del repo va por delante del estado del codigo, cuesta mas depurar y priorizar bien.
+4. Documentation drift
+   - If the narrative moves ahead of the code, debugging and prioritization get harder.
 
-## Backlog secundario
+## Secondary Backlog
 
-### P2 - Calidad y ergonomia
+### P2 - Quality and Ergonomics
 
-1. Mejorar suite de tests
-   - Añadir tests mas orientados a comportamiento real de chat y tokenizer.
-   - Añadir tests de configuracion efectiva en `train.py`.
-   - Separar claramente tests rapidos de tests pesados.
+1. Improve test coverage
+   - Add tests focused on real chat behavior and tokenizer behavior.
+   - Add tests that verify effective config handling in `train.py`.
+   - Separate fast tests from slow tests more clearly.
 
-2. Refinar experiencia de entrenamiento
-   - Mejor resumen de hiperparametros activos al arrancar.
-   - Mejor naming y ubicacion de checkpoints y logs.
-   - Seeds y metadata del run mas visibles.
+2. Improve training ergonomics
+   - Print a clearer summary of active hyperparameters on startup.
+   - Make checkpoint and log naming more explicit.
+   - Expose seeds and run metadata more visibly.
 
-3. Mejorar estructura de dependencias
-   - Posible separacion en `requirements-train.txt`, `requirements-dev.txt` o equivalente.
+3. Improve dependency structure
+   - Consider splitting training and dev dependencies into separate requirement files.
 
-### P3 - Futuro
+### P3 - Future
 
-1. Sliding window o estrategia para contexto largo.
-2. Soporte multi-GPU o DDP.
-3. Docker o entorno reproducible mas cerrado.
-4. Integracion opcional con W&B u otra telemetria de experimentos.
+1. Sliding window or a better long-context strategy.
+2. Multi-GPU or DDP support.
+3. Docker or a more closed reproducible environment.
+4. Optional experiment tracking integration.
 
-## Checklist post-retrain
+## Post-Run Checklist
 
-Cuando termine el entrenamiento actual:
+When the active finetune finishes:
 
-1. Validar metricas y comportamiento del nuevo checkpoint.
-2. Revisar tokenizer y bug de espacios con ejemplos reales de chat.
-3. ~~Corregir o rehacer `test_tokenizer_roundtrip`.~~ **DONE**
-4. ~~Limpiar `requirements.txt`.~~ **DONE**
-5. Conectar `train.py` con la configuracion unificada.
-6. Mejorar docs y claims segun el estado real del proyecto.
+1. Validate metrics and output quality on the new checkpoint.
+2. Revisit tokenizer behavior with real chat examples.
+3. Fix or redesign the tokenizer roundtrip test if needed.
+4. Wire `train.py` to the unified configuration path.
+5. Refresh docs and status claims to match the code.

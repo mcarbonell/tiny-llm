@@ -115,7 +115,7 @@ def test_data_loading():
     print("Data loading shapes verificadas correctamente.")
 
 def test_kv_cache():
-    """Verificar que KV-cache produce mismo output que sin cache."""
+    """Verificar que KV-cache incremental produce el mismo último logit que el forward completo."""
     args = ModelArgs(dim=128, n_layers=2, n_heads=4, n_kv_heads=2, vocab_size=1000, max_seq_len=64)
     model = TinyThinker(args)
     
@@ -125,24 +125,63 @@ def test_kv_cache():
     # Sin cache
     logits_no_cache = model(tokens)
     
-    # Con cache (simular incremental)
-    past_key_values = None
-    logits_with_cache = []
-    for i in range(seqlen):
-        token = tokens[:, i:i+1]
-        outputs = model(token, past_key_values=past_key_values, use_cache=True)
-        if isinstance(outputs, tuple):
-            logit, past_key_values = outputs
-        else:
-            logit = outputs
-        logits_with_cache.append(logit)
-    
-    logits_with_cache = torch.cat(logits_with_cache, dim=1)
-    
-    # Comparar shapes (no exact match por diferencias en mask/KV)
-    assert logits_with_cache.shape == logits_no_cache.shape, f"Shapes don't match: {logits_with_cache.shape} vs {logits_no_cache.shape}"
-    assert not torch.isnan(logits_with_cache).any(), "Incremental logits contain NaN"
-    print("KV-cache verificado correctamente (shapes y no NaN).")
+    # Con cache, procesamos un prefijo y luego continuamos token a token.
+    prefix_len = 8
+    prefix = tokens[:, :prefix_len]
+    suffix = tokens[:, prefix_len:]
+
+    with torch.no_grad():
+        _, past_key_values = model(prefix, use_cache=True)
+        last_logits = None
+        for i in range(suffix.size(1)):
+            token = suffix[:, i:i+1]
+            outputs = model(token, past_key_values=past_key_values, use_cache=True)
+            if isinstance(outputs, tuple):
+                logit, past_key_values = outputs
+            else:
+                logit = outputs
+            last_logits = logit
+
+    assert last_logits is not None, "No se generaron logits con KV-cache incremental"
+    assert last_logits.shape == (bsz, 1, args.vocab_size), f"Logits finales con cache: {last_logits.shape}"
+    diff = (logits_no_cache[:, -1, :] - last_logits[:, -1, :]).abs().max().item()
+    assert diff < 1e-4, f"KV-cache incremental no coincide con forward completo: diff={diff}"
+    assert not torch.isnan(last_logits).any(), "Incremental logits contain NaN"
+    print("KV-cache verificado correctamente (incremental vs completo).")
+
+
+def test_generate_text_prefills_prompt(monkeypatch):
+    from scripts.eval import generate_text
+
+    calls = []
+
+    class DummyModel:
+        def eval(self):
+            return self
+
+        def __call__(self, tokens, past_key_values=None, use_cache=False):
+            calls.append((tuple(tokens.shape), past_key_values is not None, use_cache))
+            vocab_size = 8
+            logits = torch.zeros(tokens.size(0), tokens.size(1), vocab_size)
+            logits[:, -1, 3] = 10.0
+            next_past = ("cached",)
+            if use_cache:
+                return logits, next_past
+            return logits
+
+    def fake_multinomial(probs, num_samples=1):
+        return torch.zeros((probs.size(0), num_samples), dtype=torch.long)
+
+    monkeypatch.setattr(torch, "multinomial", fake_multinomial)
+
+    model = DummyModel()
+    input_ids = torch.tensor([[10, 11, 12]], dtype=torch.long)
+    output = generate_text(model, None, input_ids, max_new_tokens=1, temperature=1.0, device="cpu", top_k=None)
+
+    assert output.shape[1] == 4
+    assert calls[0] == ((1, 3), False, True)
+    assert calls[1] == ((1, 1), True, True)
+    assert output[0, -1].item() == 0
 
 if __name__ == "__main__":
     test_model_forward()

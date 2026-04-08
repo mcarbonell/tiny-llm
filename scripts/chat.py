@@ -166,7 +166,7 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
                     current_tool_query.append(token_id)
             else:
                 # -------- FLUJO TEXTUAL NORMAL --------
-                new_text = tokenizer.decode([token_id], skip_special_tokens=True)
+                new_text = tokenizer.decode([token_id], skip_special_tokens=False)
                 print(new_text, end="", flush=True)
 
     print("\n")
@@ -177,7 +177,21 @@ def main():
     parser.add_argument("--max-tokens", type=int, default=150, help="Max tokens to generate")
     parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature")
     parser.add_argument("--top-k", type=int, default=40, help="Top-k filtering")
+    parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda", "dml"], help="Device to use")
+    parser.add_argument("--prompt", type=str, default=None, help="Optional prompt for non-interactive mode")
     args = parser.parse_args()
+
+    global DEVICE
+    if args.device == "dml":
+        try:
+            import torch_directml
+            DEVICE = torch_directml.device()
+        except ImportError:
+            DEVICE = torch.device("cpu")
+    elif args.device == "cuda" and torch.cuda.is_available():
+        DEVICE = torch.device("cuda")
+    else:
+        DEVICE = torch.device("cpu")
 
     # Configurar logging con FileHandler para registrar eventos del chat
     log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
@@ -214,6 +228,13 @@ def main():
     model.load_state_dict(checkpoint['model'], strict=False)
     model.eval()
     model.to(DEVICE)
+
+    if args.prompt:
+        SYSTEM_TEXT = "[SYSTEM] You are TinyThinker, a compact AI assistant. You cannot reliably recall specific facts or dates. When asked factual questions, use your search tool. [/SYSTEM]"
+        full_prompt = f"{SYSTEM_TEXT}\nUser: {args.prompt}\nAssistant: "
+        print(f"\nUsuario> {args.prompt}")
+        generate_interactive(model, tokenizer, full_prompt, max_new_tokens=args.max_tokens, temperature=args.temperature, top_k=args.top_k)
+        return
 
     iter_n, loss_val = checkpoint.get('iter_num', 'N/A'), checkpoint.get('val_loss', 'N/A')
     if isinstance(loss_val, (int, float)):
