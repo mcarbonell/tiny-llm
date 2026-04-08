@@ -26,10 +26,36 @@ DEFAULT_GRAD_CLIP = 1.0
 DEFAULT_GRAD_ACCUM = 4
 
 # Paths por defecto
-BASE_CKPT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_base_300M_v2.pt")
-OUT_CKPT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_finetuned.pt")
+BASE_CKPT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_base_corpus305M_v2.pt")
+OUT_CKPT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_sft_latest.pt")
 DATA_FILE_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "data", "tool_dataset_clean.json")
 TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json")
+
+def build_sft_example(full_text, tokenizer, max_seq_len):
+    """Construye un ejemplo causal SFT con labels desplazadas una posición."""
+    if "Assistant:" not in full_text:
+        return None
+
+    parts = full_text.split("Assistant:")
+    prompt_text = parts[0] + "Assistant:"
+
+    prompt_ids = tokenizer.encode(prompt_text).ids
+    full_ids = tokenizer.encode(full_text).ids[:max_seq_len]
+
+    input_ids = full_ids
+    targets = full_ids[1:] + [-100]
+    prompt_cutoff = min(max(len(prompt_ids) - 1, 0), len(targets))
+    targets[:prompt_cutoff] = [-100] * prompt_cutoff
+
+    padding_len = max_seq_len - len(input_ids)
+    if padding_len > 0:
+        input_ids += [0] * padding_len
+        targets += [-100] * padding_len
+
+    return {
+        "input_ids": torch.tensor(input_ids, dtype=torch.long),
+        "labels": torch.tensor(targets, dtype=torch.long),
+    }
 
 def load_sft_dataset(data_file, tokenizer, max_seq_len):
     """
@@ -44,39 +70,13 @@ def load_sft_dataset(data_file, tokenizer, max_seq_len):
         dataset = json.load(f)
         
     processed_examples = []
-    assistant_token_id = tokenizer.encode("Assistant:").ids
-    # Buscamos una secuencia común que identifique el inicio de la respuesta
-    # Nota: En ByteLevel BPE "Assistant:" puede tokenizarse de varias formas según el contexto.
-    # Usaremos una estrategia más robusta buscando el ID del último token de la cabecera.
 
     print(f"Procesando {len(dataset)} ejemplos para SFT...")
     
     for example in dataset:
-        full_text = example["text"]
-        if "Assistant:" not in full_text: continue
-        
-        # Dividir en Prompt y Respuesta
-        parts = full_text.split("Assistant:")
-        prompt_text = parts[0] + "Assistant:"
-        response_text = parts[1]
-        
-        prompt_ids = tokenizer.encode(prompt_text).ids
-        response_ids = tokenizer.encode(response_text).ids
-        
-        input_ids = (prompt_ids + response_ids)[:max_seq_len]
-        # Target: Igual que input_ids pero con -100 en la parte del prompt
-        targets = ([-100] * len(prompt_ids) + response_ids)[:max_seq_len]
-        
-        # Padding manual hasta max_seq_len
-        padding_len = max_seq_len - len(input_ids)
-        if padding_len > 0:
-            input_ids += [0] * padding_len
-            targets += [-100] * padding_len
-            
-        processed_examples.append({
-            "input_ids": torch.tensor(input_ids, dtype=torch.long),
-            "labels": torch.tensor(targets, dtype=torch.long)
-        })
+        built = build_sft_example(example["text"], tokenizer, max_seq_len)
+        if built is not None:
+            processed_examples.append(built)
         
     return processed_examples
 

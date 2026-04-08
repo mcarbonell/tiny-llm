@@ -35,6 +35,7 @@ These items are already in place and should not be reopened unless a regression 
 2. `finetune.py` was updated for compatibility with `torch.amp.GradScaler`.
 3. `chat.py` logging duplication was removed.
 4. `test_tokenizer_roundtrip` was relaxed to account for ByteLevel decoding behavior.
+5. The SFT label alignment bug was fixed in `scripts/finetune.py`, so the previous finetune run should be treated as invalid and restarted.
 
 ## Immediate Priority
 
@@ -155,6 +156,7 @@ When the active finetune finishes:
 
 1. Validate metrics and output quality on the new checkpoint.
 2. Revisit tokenizer behavior with real chat examples.
-3. Fix or redesign the tokenizer roundtrip test if needed.
-4. Wire `train.py` to the unified configuration path.
-5. Refresh docs and status claims to match the code.
+3. Confirm the new SFT checkpoint does not collapse to whitespace or token-copying behavior.
+4. Fix or redesign the tokenizer roundtrip test if needed.
+5. Wire `train.py` to the unified configuration path.
+6. Refresh docs and status claims to match the code.

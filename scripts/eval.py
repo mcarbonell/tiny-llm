@@ -110,6 +110,22 @@ def calculate_perplexity(model, tokenizer, dataset_path, device='cpu', seq_len=2
     perplexity = torch.exp(torch.tensor(avg_loss)).item()
     return perplexity
 
+def resolve_checkpoint_path(checkpoints_dir):
+    priority = [
+        "ckpt_sft_latest.pt",
+        "ckpt_sft_best.pt",
+        "ckpt_pretrain_best.pt",
+        "ckpt_pretrain_latest.pt",
+        "ckpt_finetuned.pt",
+        "ckpt_best.pt",
+        "ckpt.pt",
+    ]
+    for ckpt in priority:
+        path = os.path.join(checkpoints_dir, ckpt)
+        if os.path.exists(path):
+            return path
+    return None
+
 def generate_text(model, tokenizer, input_ids, max_new_tokens=50, temperature=1.0, device='cpu', top_k=40):
     """Genera texto con KV-cache para eficiencia."""
     model.eval()
@@ -204,11 +220,7 @@ def main():
     # Resolver checkpoint
     if not args.checkpoint:
         checkpoints_dir = os.path.join(os.path.dirname(__file__), "..", "checkpoints")
-        for ckpt in ['ckpt_finetuned.pt', 'ckpt_best.pt', 'ckpt.pt']:
-            path = os.path.join(checkpoints_dir, ckpt)
-            if os.path.exists(path):
-                args.checkpoint = path
-                break
+        args.checkpoint = resolve_checkpoint_path(checkpoints_dir)
 
     if not args.checkpoint or not os.path.exists(args.checkpoint):
         print("Error: No se encontró un checkpoint válido.")

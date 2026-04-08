@@ -3,6 +3,7 @@ import sys
 import re
 import argparse
 import logging
+import warnings
 import torch
 import torch.nn.functional as F
 from tokenizers import Tokenizer
@@ -31,16 +32,46 @@ TOKENIZER_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model
 
 logger = logging.getLogger(__name__)
 
+def get_search_client():
+    try:
+        from ddgs import DDGS
+        return DDGS, "ddgs"
+    except ImportError:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r".*duckduckgo_search.*renamed to `ddgs`.*",
+                category=RuntimeWarning,
+            )
+            try:
+                from duckduckgo_search import DDGS
+                return DDGS, "duckduckgo_search"
+            except ImportError:
+                return None, None
+
+def _first_existing(paths):
+    for path in paths:
+        if os.path.exists(path):
+            return path
+    return None
+
 def resolve_checkpoint(checkpoint_arg=None):
     if checkpoint_arg and os.path.exists(checkpoint_arg):
         return checkpoint_arg
     if checkpoint_arg:
         print(f"Warning: Checkpoint '{checkpoint_arg}' not found, falling back to auto-detect.")
-    priority = ["ckpt_finetuned.pt", "ckpt_best.pt"]
-    for name in priority:
-        path = os.path.join(CHECKPOINTS_DIR, name)
-        if os.path.exists(path):
-            return path
+    priority = [
+        "ckpt_sft_latest.pt",
+        "ckpt_sft_best.pt",
+        "ckpt_pretrain_best.pt",
+        "ckpt_pretrain_latest.pt",
+        "ckpt_finetuned.pt",
+        "ckpt_best.pt",
+        "ckpt.pt",
+    ]
+    path = _first_existing([os.path.join(CHECKPOINTS_DIR, name) for name in priority])
+    if path:
+        return path
     candidates = sorted([f for f in os.listdir(CHECKPOINTS_DIR) if f.startswith("ckpt_") and f.endswith(".pt")])
     if candidates:
         return os.path.join(CHECKPOINTS_DIR, candidates[-1])
@@ -50,22 +81,26 @@ def search_web_tool(query: str) -> str:
     """Implementación real de herramienta externa usando DuckDuckGo."""
     print(f"\n[TOOLCALL] Buscando en internet: '{query}'...", end="")
     try:
-        from duckduckgo_search import DDGS
+        DDGS, backend = get_search_client()
+        if DDGS is None:
+            print(" No search package installed.")
+            logger.warning(f"[search_web_tool] Sin paquete de búsqueda disponible | query='{query}'")
+            return f"Simulated search result for '{query}': This is a placeholder. Install ddgs for real results."
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=3))
         if results:
             result_text = "\n".join([f"- {r['title']}: {r['body']}" for r in results])
             print(" ¡Hecho!")
-            logger.info(f"[search_web_tool] OK | query='{query}' | {len(results)} resultados")
+            logger.info(f"[search_web_tool] OK | backend={backend} | query='{query}' | {len(results)} resultados")
             return result_text
         else:
             print(" No results.")
-            logger.warning(f"[search_web_tool] Sin resultados | query='{query}'")
+            logger.warning(f"[search_web_tool] Sin resultados | backend={backend} | query='{query}'")
             return "No se encontraron resultados relevantes."
     except Exception as e:
         print(f" Error: {e}. Usando fallback.")
         logger.error(f"[search_web_tool] ERROR | query='{query}' | {type(e).__name__}: {e}")
-        return f"Simulated search result for '{query}': This is a placeholder. Install duckduckgo-search for real results."
+        return f"Simulated search result for '{query}': This is a placeholder. Install ddgs for real results."
 
 def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperature=0.7, top_k=40):
     """Genera texto con KV-cache para inferecia eficiente.
@@ -87,31 +122,33 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
     in_tool_call = False
     current_tool_query = []
     past_key_values = None
+    visible_output = []
 
     print("\nTinyThinker> ", end="", flush=True)
 
     with torch.no_grad():
+        logits, past_key_values = None, None
+        
         for step in range(max_new_tokens):
-            # --- Primer paso: procesar prefijo completo ---
-            # --- Pasos sucesivos: pasar solo el último token con KV-cache ---
-            if step == 0:
-                # Acortar contexto si es necesario
+            # --- Inferencia con KV-cache ---
+            if logits is None:
+                # Caso inicial o tras inyección de herramienta: procesar prefijo completo
                 x_cond = x[:, -model.args.max_seq_len:] if x.size(1) > model.args.max_seq_len else x
                 logits, past_key_values = model(x_cond, use_cache=True)
             else:
-                # Solo el último token generado: (1, 1)
+                # Generación incremental: pasar solo el último token generado
                 last_token = x[:, -1:]
                 logits, past_key_values = model(last_token, past_key_values=past_key_values, use_cache=True)
 
             # Logits del último paso
-            logits = logits[:, -1, :] / temperature
+            logits_step = logits[:, -1, :] / temperature
 
             # Filtro Top-K
             if top_k is not None:
-                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-                logits[logits < v[:, [-1]]] = -float('Inf')
+                v, _ = torch.topk(logits_step, min(top_k, logits_step.size(-1)))
+                logits_step[logits_step < v[:, [-1]]] = -float('Inf')
 
-            probs = F.softmax(logits, dim=-1)
+            probs = F.softmax(logits_step, dim=-1)
             # DirectML multinomial CPU fallback (Evita NaN errors en GPU)
             probs_cpu = probs.cpu()
             if torch.isnan(probs_cpu).any() or torch.isinf(probs_cpu).any():
@@ -143,12 +180,22 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
                     in_tool_call = False
                     # Reconstruir query
                     query_str = tokenizer.decode(current_tool_query, skip_special_tokens=True).strip()
+                    
+                    # Limpiar formato search("...") si el modelo lo incluyó literalmente
+                    match = re.search(r'search\("(.*)"\)', query_str)
+                    if match:
+                        query_str = match.group(1)
 
                     # Ejecutar herramienta
                     result = search_web_tool(query_str)
 
                     # Inyectar resultado al contexto
-                    print(f"[INYECCIÓN AL CONTEXTO] <TOOL_RESULT> {result} </TOOL_RESULT>")
+                    # IMPORTANTE: Aseguramos que la etiqueta </TOOL_CALL> esté en el contexto antes del resultado
+                    print(f"[INYECCIÓN AL CONTEXTO] <TOOL_RESULT> {result[:50]}... </TOOL_RESULT>")
+                    
+                    # No necesitamos re-añadir </TOOL_CALL> porque ya se añadió a 'x' arriba:
+                    # x = torch.cat((x, next_token), dim=1)  <-- esto ya incluyó el </TOOL_CALL>
+                    
                     tool_result_text = f" <TOOL_RESULT> {result} </TOOL_RESULT> "
                     result_ids = tokenizer.encode(tool_result_text).ids
                     result_tensor = torch.tensor([result_ids], dtype=torch.long, device=DEVICE)
@@ -156,10 +203,8 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
                     # Añadir tokens del resultado al contexto
                     x = torch.cat((x, result_tensor), dim=1)
 
-                    # Resetear KV-cache para incluir el resultado inyectado
-                    # Hay que re-codificar toda la secuencia actualizada
-                    x_cond = x[:, -model.args.max_seq_len:] if x.size(1) > model.args.max_seq_len else x
-                    logits, past_key_values = model(x_cond, use_cache=True)
+                    # Resetear para forzar re-procesamiento completo en el próximo paso
+                    logits, past_key_values = None, None
 
                     print("\nTinyThinker> ", end="", flush=True)
                 else:
@@ -167,7 +212,11 @@ def generate_interactive(model, tokenizer, prompt, max_new_tokens=150, temperatu
             else:
                 # -------- FLUJO TEXTUAL NORMAL --------
                 new_text = tokenizer.decode([token_id], skip_special_tokens=False)
+                visible_output.append(new_text)
                 print(new_text, end="", flush=True)
+
+    if visible_output and not any(chunk.strip() for chunk in visible_output):
+        print("\n[debug] El modelo solo generó whitespace/tokens vacíos en esta respuesta.")
 
     print("\n")
 

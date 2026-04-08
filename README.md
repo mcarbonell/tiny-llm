@@ -50,11 +50,16 @@ python scripts/finetune.py --lora_r 8 --lora_alpha 16 --data_file data/tool_data
 python scripts/chat.py
 
 # 7. Evaluar el modelo (perplexity y accuracy en tool-calling)
-python scripts/eval.py --checkpoint checkpoints/ckpt_finetuned.pt
+python scripts/eval.py --checkpoint checkpoints/ckpt_sft_latest.pt
 ```
 
 ## 📌 Nota sobre dataset
 El finetuning por defecto usa `data/tool_dataset_real.json`, pero puedes cambiar el archivo con `--data_file`.
+
+## 📦 Convención de checkpoints
+- `ckpt_pretrain_latest.pt` y `ckpt_pretrain_best.pt` son checkpoints de pretraining.
+- `ckpt_sft_latest.pt` es el checkpoint de fine-tuning.
+- Los nombres antiguos siguen aceptados como fallback mientras se migra el repo.
 
 ---
 *Construido artesanalmente desde cero.*

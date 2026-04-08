@@ -126,9 +126,9 @@ def main():
     # 4. Lógica de Reanudación
     # ----------------------------------
     if args_cli.resume:
-        ckpt_path = os.path.join(out_dir, 'ckpt_best.pt')
+        ckpt_path = os.path.join(out_dir, 'ckpt_pretrain_best.pt')
         if not os.path.exists(ckpt_path):
-            ckpt_path = os.path.join(out_dir, 'ckpt.pt')
+            ckpt_path = os.path.join(out_dir, 'ckpt_pretrain_latest.pt')
         
         if os.path.exists(ckpt_path):
             print(f"[Resume] Cargando progreso desde {ckpt_path}...")
@@ -226,10 +226,10 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
                 'args': model_args,
                 'val_loss': losses['val']
             }
-            torch.save(checkpoint, os.path.join(out_dir, 'ckpt.pt'))
+            torch.save(checkpoint, os.path.join(out_dir, 'ckpt_pretrain_latest.pt'))
             if losses['val'] < best_val_loss:
                 best_val_loss = losses['val']
-                torch.save(checkpoint, os.path.join(out_dir, 'ckpt_best.pt'))
+                torch.save(checkpoint, os.path.join(out_dir, 'ckpt_pretrain_best.pt'))
                 t_print(f" -> Nuevo mejor modelo (val_loss: {best_val_loss:.4f})")
 
         # Paso de entrenamiento

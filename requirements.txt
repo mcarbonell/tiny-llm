@@ -10,7 +10,7 @@ tqdm>=4.66.0
 # Tool-calling & Data Generation
 openai>=1.50.0
 python-dotenv>=1.0.0
-duckduckgo-search>=6.3.0
+ddgs>=9.0.0
 
 # Config
 PyYAML>=6.0.2

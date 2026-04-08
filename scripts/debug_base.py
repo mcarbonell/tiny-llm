@@ -5,7 +5,18 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from model.model import TinyThinker
 from tokenizers import Tokenizer
 
-CKPT_PATH = "checkpoints/ckpt_base_300M_v2.pt"
+def resolve_checkpoint():
+    candidates = [
+        "checkpoints/ckpt_base_corpus305M_v2.pt",
+        "checkpoints/ckpt_base_300M_v2.pt",
+        "checkpoints/old/ckpt_first_pretraining.pt",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    raise FileNotFoundError("No se encontró un checkpoint base válido.")
+
+CKPT_PATH = resolve_checkpoint()
 TOKENIZER_PATH = "model/tokenizer.json"
 
 tokenizer = Tokenizer.from_file(TOKENIZER_PATH)

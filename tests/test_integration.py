@@ -8,7 +8,7 @@ Ejecución:
     pytest tests/test_integration.py -k "config or valid"   # solo los rápidos (sin modelo)
     pytest tests/ -v                                         # unit + integration
 
-Tests que requieren checkpoint se saltan automáticamente si no existe 'checkpoints/ckpt_best.pt'.
+Tests que requieren checkpoint se saltan automáticamente si no existe un checkpoint pretrain/sft válido.
 """
 import os
 import sys
@@ -29,14 +29,30 @@ from tokenizers import Tokenizer
 # Rutas de artefactos reales
 # ---------------------------------------------------------------------------
 CHECKPOINTS_DIR = os.path.join(ROOT, "checkpoints")
-CKPT_PATH       = os.path.join(CHECKPOINTS_DIR, "ckpt_best.pt")
 TOKENIZER_PATH  = os.path.join(ROOT, "model", "tokenizer.json")
 DATASET_PATH    = os.path.join(ROOT, "data", "tool_dataset_real.json")
 
+
+def resolve_checkpoint_path():
+    priority = [
+        "ckpt_sft_latest.pt",
+        "ckpt_sft_best.pt",
+        "ckpt_pretrain_best.pt",
+        "ckpt_pretrain_latest.pt",
+        "ckpt_finetuned.pt",
+        "ckpt_best.pt",
+        "ckpt.pt",
+    ]
+    for name in priority:
+        path = os.path.join(CHECKPOINTS_DIR, name)
+        if os.path.exists(path):
+            return path
+    return None
+
 # Marcadores para saltar tests si los artefactos no existen
 requires_checkpoint = pytest.mark.skipif(
-    not os.path.exists(CKPT_PATH),
-    reason=f"Checkpoint no encontrado: {CKPT_PATH} — ejecuta train.py primero"
+    resolve_checkpoint_path() is None,
+    reason="No se encontró un checkpoint válido — ejecuta train.py o finetune.py primero"
 )
 requires_dataset = pytest.mark.skipif(
     not os.path.exists(DATASET_PATH),
@@ -49,13 +65,14 @@ requires_dataset = pytest.mark.skipif(
 @pytest.fixture(scope="module")
 def loaded_model_and_tokenizer():
     """Carga el modelo y tokenizador una sola vez para todos los tests del módulo."""
-    if not os.path.exists(CKPT_PATH):
+    ckpt_path = resolve_checkpoint_path()
+    if not ckpt_path:
         pytest.skip("Checkpoint no disponible")
     if not os.path.exists(TOKENIZER_PATH):
         pytest.skip("Tokenizer no disponible")
 
     tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
-    checkpoint = torch.load(CKPT_PATH, map_location="cpu", weights_only=False)
+    checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     model_args = checkpoint["args"]
     model = TinyThinker(model_args)
     model.load_state_dict(checkpoint["model"], strict=False)

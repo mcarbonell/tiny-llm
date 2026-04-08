@@ -6,6 +6,7 @@ import torch
 import json
 from tokenizers import Tokenizer
 from model.model import TinyThinker, ModelArgs, precompute_freqs_cis, LoRALinear
+from scripts.finetune import build_sft_example
 
 def test_model_forward():
     # Instanciamos una versión de juguete de la red solo para comprobar cálculos de tensores
@@ -182,6 +183,31 @@ def test_generate_text_prefills_prompt(monkeypatch):
     assert calls[0] == ((1, 3), False, True)
     assert calls[1] == ((1, 1), True, True)
     assert output[0, -1].item() == 0
+
+
+def test_sft_example_labels_are_shifted():
+    tokenizer_path = os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json")
+    if not os.path.exists(tokenizer_path):
+        pytest.skip("Tokenizer no encontrado")
+
+    tokenizer = Tokenizer.from_file(tokenizer_path)
+    full_text = (
+        "[SYSTEM] You are TinyThinker, a compact AI assistant. You cannot reliably recall specific facts or dates. "
+        "When asked factual questions, use your search tool. [/SYSTEM]\n"
+        "User: Who discovered penicillin?\n"
+        "Assistant: <THINK> I need to verify the specific individual. </THINK> <TOOL_CALL> search(\"who discovered penicillin\") </TOOL_CALL> <eos>"
+    )
+
+    example = build_sft_example(full_text, tokenizer, max_seq_len=256)
+    assert example is not None
+
+    input_ids = example["input_ids"].tolist()
+    labels = example["labels"].tolist()
+    prompt_text = full_text.split("Assistant:")[0] + "Assistant:"
+    prompt_len = len(tokenizer.encode(prompt_text).ids)
+
+    assert labels[prompt_len - 1] == input_ids[prompt_len], "La primera etiqueta útil debe ser el primer token de la respuesta"
+    assert all(x == -100 for x in labels[:prompt_len - 1]), "El prompt debe quedar enmascarado"
 
 if __name__ == "__main__":
     test_model_forward()
