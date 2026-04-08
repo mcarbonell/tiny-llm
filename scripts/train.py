@@ -28,8 +28,11 @@ DEFAULT_EVAL_INTERVAL = 250
 DEFAULT_EVAL_ITERS = 20
 DEFAULT_DATA_PATH = "data/train_combined.bin"
 
+import yaml
+
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyThinker Pretrain — Versión Optimizada")
+    parser.add_argument('--config', type=str, default=None, help='Ruta al config YAML. Sobreescribe otros argumentos.')
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'dml', 'mps'], help='Dispositivo de entrenamiento.')
     parser.add_argument('--resume', action='store_true', help='Reanudar desde el último checkpoint.')
     parser.add_argument('--max_iters', type=int, default=DEFAULT_MAX_ITERS, help='Número total de iteraciones.')
@@ -40,8 +43,24 @@ def parse_args():
     parser.add_argument('--use_gradient_checkpointing', action='store_true', help='Activar ahorro de RAM.')
     return parser.parse_args()
 
+def load_config(args):
+    config = {}
+    if args.config:
+        with open(args.config, 'r') as f:
+            config = yaml.safe_load(f)
+    
+    # Fusionar yaml en args
+    for k, v in config.items():
+        setattr(args, k, v)
+        
+    return args
+
 def main():
     args_cli = parse_args()
+    args_cli = load_config(args_cli)
+    
+    if hasattr(args_cli, 'learning_rate'): 
+        args_cli.lr = args_cli.learning_rate
     
     # ----------------------------------
     # 1. Configuración de Hardware
@@ -81,7 +100,7 @@ def main():
     # ----------------------------------
     # 2. Carga de Datos (Memmap)
     # ----------------------------------
-    data_path = DEFAULT_DATA_PATH
+    data_path = getattr(args_cli, 'data_path', DEFAULT_DATA_PATH)
     if not os.path.exists(data_path):
         raise FileNotFoundError(f"Falta el dataset: {data_path}")
     
@@ -105,12 +124,16 @@ def main():
     # ----------------------------------
     # 3. Inicialización del Modelo
     # ----------------------------------
-    out_dir = "checkpoints"
+    out_dir = getattr(args_cli, 'checkpoint_dir', "checkpoints")
     os.makedirs(out_dir, exist_ok=True)
     
     model_args = ModelArgs(
-        dim=256, n_layers=6, n_heads=8, n_kv_heads=4,
-        vocab_size=16384, max_seq_len=args_cli.seq_len
+        dim=getattr(args_cli, 'dim', 256),
+        n_layers=getattr(args_cli, 'n_layers', 6),
+        n_heads=getattr(args_cli, 'n_heads', 8),
+        n_kv_heads=getattr(args_cli, 'n_kv_heads', 4),
+        vocab_size=getattr(args_cli, 'vocab_size', 16384),
+        max_seq_len=getattr(args_cli, 'max_seq_len', getattr(args_cli, 'seq_len', 1024))
     )
     model = TinyThinker(model_args)
     model.to(device)

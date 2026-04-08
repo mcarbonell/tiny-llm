@@ -38,3 +38,4 @@ data/
 # Local docs
 docs/research/
 docs/pdfs/
+*.pdf

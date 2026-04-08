@@ -28,7 +28,7 @@ DEFAULT_GRAD_ACCUM = 4
 # Paths por defecto
 BASE_CKPT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_base_305M_ctx1024.pt")
 OUT_CKPT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "ckpt_sft_ctx1024.pt")
-DATA_FILE_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "data", "tool_dataset_clean.json")
+DATA_FILE_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "data", "tool_dataset_mixed.json")
 TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json")
 
 def build_sft_example(full_text, tokenizer, max_seq_len):
@@ -98,11 +98,15 @@ def parse_args():
     parser.add_argument('--max_iters', type=int, default=DEFAULT_MAX_ITERS, help='Iteraciones.')
     parser.add_argument('--learning_rate', type=float, default=DEFAULT_LR, help='LR.')
     parser.add_argument('--batch_size', type=int, default=DEFAULT_BATCH_SIZE, help='Batch size.')
+    parser.add_argument('--data_file', type=str, default=DATA_FILE_DEFAULT, help='Ruta al dataset SFT.')
     return parser.parse_args()
 
 def freeze_base_weights(model):
     for name, param in model.named_parameters():
-        if 'lora_' in name or 'tok_embeddings' in name or 'output' in name:
+        # SOLO entrenamos adaptadores LoRA. 
+        # Mantener embeddings y pesos base congelados es crucial en modelos pequeños 
+        # para evitar el colapso lingüístico durante el SFT.
+        if 'lora_' in name:
             param.requires_grad = True
         else:
             param.requires_grad = False
@@ -132,7 +136,7 @@ def main():
 
     # 3. Dataset SFT con Máscara
     tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
-    dataset = load_sft_dataset(DATA_FILE_DEFAULT, tokenizer, DEFAULT_SEQ_LEN)
+    dataset = load_sft_dataset(cmd_args.data_file, tokenizer, DEFAULT_SEQ_LEN)
     
     # 4. Logs
     log_file = os.path.join("logs", f"sft_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
@@ -142,6 +146,26 @@ def main():
         full = f"[{elapsed}] {msg}"
         print(full)
         with open(log_file, "a") as f: f.write(full + "\n")
+
+    metadata_block = f"""==================================================
+METADATOS DE EJECUCION SFT
+Fecha/Hora : {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Hardware   : {device} (Hilos CPU: {os.cpu_count()})
+Dataset    : {cmd_args.data_file}
+Checkpoint : {BASE_CKPT_DEFAULT}
+Salida     : {OUT_CKPT_DEFAULT}
+Hiperparametros:
+  - Max Iters : {cmd_args.max_iters}
+  - Batch Size: {cmd_args.batch_size}
+  - Seq Len   : {DEFAULT_SEQ_LEN}
+  - Learn Rate: {cmd_args.learning_rate:.2e}
+  - LoRA r/alp: {cmd_args.lora_r} / {cmd_args.lora_alpha}
+  - Grad Accum: {DEFAULT_GRAD_ACCUM}
+Parametros : Entrenables={sum(p.numel() for p in model.parameters() if p.requires_grad)/1e6:.2f}M
+=================================================="""
+    print(metadata_block)
+    with open(log_file, "a") as f:
+        f.write(metadata_block + "\n")
 
     t_print(f"SFT Iniciado | Device: {device} | Params: {sum(p.numel() for p in model.parameters() if p.requires_grad)/1e6:.2f}M")
     optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=cmd_args.learning_rate)

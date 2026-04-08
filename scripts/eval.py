@@ -62,8 +62,10 @@ def load_model_and_tokenizer(checkpoint_path, device='cpu'):
 
     return model, tokenizer, config
 
-def calculate_perplexity(model, tokenizer, dataset_path, device='cpu', seq_len=256, batch_size=4, num_batches=10):
+def calculate_perplexity(model, tokenizer, dataset_path, device='cpu', seq_len=None, batch_size=4, num_batches=10):
     """Calcula la perplexity en un dataset de validación."""
+    if seq_len is None:
+        seq_len = model.args.max_seq_len
     if not os.path.exists(dataset_path):
         print(f"Error: Dataset {dataset_path} no encontrado.")
         return None
@@ -211,11 +213,19 @@ def evaluate_tool_calling_accuracy(model, tokenizer, dataset_path, device='cpu',
 def main():
     parser = argparse.ArgumentParser(description="Evaluar el modelo TinyThinker")
     parser.add_argument('--checkpoint', type=str, default=None, help='Ruta al checkpoint')
-    parser.add_argument('--dataset', type=str, default=os.path.join(os.path.dirname(__file__), '..', 'data', 'tool_dataset_real.json'), help='Ruta al dataset de evaluación')
-    parser.add_argument('--device', type=str, default='cpu', help='Dispositivo (cpu/cuda)')
+    parser.add_argument('--dataset', type=str, default=os.path.join(os.path.dirname(__file__), '..', 'data', 'dataset_golden_v1.json'), help='Ruta al dataset de evaluación')
+    parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'dml'], help='Dispositivo (cpu/cuda/dml)')
     args = parser.parse_args()
 
-    device = args.device if torch.cuda.is_available() and args.device == 'cuda' else 'cpu'
+    device = 'cpu'
+    if args.device == 'dml':
+        try:
+            import torch_directml
+            device = torch_directml.device()
+        except ImportError:
+            pass
+    elif args.device == 'cuda' and torch.cuda.is_available():
+        device = 'cuda'
 
     # Resolver checkpoint
     if not args.checkpoint:
