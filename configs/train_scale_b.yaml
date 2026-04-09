@@ -5,13 +5,13 @@ n_kv_heads: 4
 vocab_size: 16384
 max_seq_len: 1024
 
-batch_size: 4
+batch_size: 1
 seq_len: 1024
 max_iters: 20000
 learning_rate: 0.0005
 min_lr: 0.00001
 warmup_iters: 500
-grad_accum_steps: 8
+grad_accum_steps: 32
 use_gradient_checkpointing: true
 
 data_path: data/train_combined.bin

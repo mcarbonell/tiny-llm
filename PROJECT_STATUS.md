@@ -8,7 +8,7 @@ Se finalizó el *Supervised Fine-Tuning* (SFT) del modelo 12M utilizando el `dat
 * **Conclusión:** El software de inferencia adaptado funciona. El modelo está "aprendido" sintácticamente, pero los 12 Millones de parámetros limitan el entendimiento semántico.
 
 ## Fase Actual: Fase 6 - Capacidad y Coherencia 🚀 (En Progreso)
-Objetivo: Entrenar el modelo Scale B (50M de parámetros). Al confirmar que la arquitectura e pipeline de datos funcionan en la subescala, la capacidad de Scale B solucionará el déficit cognitivo y las alucinaciones.
+Objetivo: Entrenar el modelo Scale B (50M de parámetros). Al confirmar que la arquitectura y el pipeline de datos funcionan en la subescala, la capacidad de Scale B solucionará el déficit cognitivo y las alucinaciones.
 
 ### Trabajos Activos:
 - Modificados `train.py` y `eval.py` para soportar carga dinámica de ficheros `.yaml` y contexto inteligente.
