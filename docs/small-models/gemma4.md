@@ -1,10 +1,3 @@
-
-
-
-Aquí tienes un documento estructurado en Markdown que detalla las novedades e innovaciones técnicas introducidas en **Gemma 4**, lanzado por Google a principios de abril de 2026.
-
-***
-
 # Google Gemma 4: Rompiendo las Barreras de los Modelos de Pesos Abiertos
 
 A principios de abril de 2026, Google DeepMind presentó **Gemma 4**, la más reciente y disruptiva generación de su familia de modelos de pesos abiertos. Construida sobre la investigación tecnológica de **Gemini 3**, Gemma 4 no es una simple actualización, sino un rediseño arquitectónico completo que logra rendimientos propios de modelos 20 veces más grandes.
@@ -61,6 +54,17 @@ Para gestionar de forma óptima los contextos masivos (hasta 256,000 tokens), Ge
 
 ### Per-Layer Embeddings (PLE)
 Es una innovación arquitectónica clave donde el modelo cuenta con una segunda tabla de *embeddings* (incrustaciones) que inyecta una pequeña señal residual directamente en **cada una de las capas de decodificación**, garantizando que el contexto original e inicial no se difumine a medida que atraviesa la profundidad de la red neuronal.
+
+---
+
+## 4. Aplicación de las Técnicas en TinyThinker (Escala 50M)
+
+Basándonos en estas innovaciones, podemos adaptar las técnicas de Gemma 4 para la nueva fase de TinyThinker (Scale B, ~50M):
+
+1.  **Thought-Attention (Razonamiento Latente):** Aprovechando los datos sintéticos generados por Gemini, podemos hacer fine-tuning para que TinyThinker use un flujo de razonamiento antes de responder (o llamar a una herramienta) usando tokens especiales como `<think>`.
+2.  **MoE a Escala Tiny:** En lugar de crear un modelo denso de 50M, podríamos implementar una red con 16-32 miniexpertos y enrutamiento top-2. Esto daría un "modelo teórico" cercano a 120-150M de capacidad, corriendo con el mismo impacto e inferencia que uno denso de 50M.
+3.  **Atención Híbrida Inteligente:** Para extender la pequeña ventana de contexto sin penalizar la memoria (optimizando el KV-cache), podemos intercalar mecanismos *Sliding-Window Attention* (ej. ventanas de 256 tokens) en las capas iniciales, reservando la *Global Attention* pura para las últimas capas.
+4.  **Per-Layer Embeddings (PLE):** Es una excelente adición de bajo coste computacional. Consistiría en agregar una conexión residual simple de los *embeddings* de entrada originales directamente hacia el input de cada capa del bloque transformer, mitigando la degradación de contexto ("olvido" del prompt) en modelos de profundidad/anchura reducida.
 
 ---
 

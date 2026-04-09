@@ -27,6 +27,17 @@ Objetivo: Reducir las alucinaciones y mejorar la síntesis de información.
     *   Evaluar el impacto en la latencia de CPU.
     *   Comprobar si la mayor capacidad soluciona el "ruido" en las respuestas largas.
 
+## 🚀 Fase 7: Arquitectura Avanzada (Inspiración Gemma 4)
+Objetivo: Implementar eficiencia arquitectónica para superar la limitación teórica de parámetros asumiendo el mismo coste computacional.
+
+### P0 - Latent Reasoning Integrado
+1.  **Aprovechamiento Sintético:** Validación del rendimiento del dataset `dataset_golden_v1.json` que ya cuenta con los tags `<think>` nativos.
+2.  **Métricas:** Evaluar precisión en toma de decisiones *Zero-Shot* post-entrenamiento.
+
+### P1 - Refactorización de Arquitectura
+1.  **MicroMoE (Mixture of Experts):** Desarrollar capa FFN distribuida (ej. 16/32 expertos, Top-2 routing) para el siguiente escalón de parámetros tras la ejecución densa actual (~78M).
+2.  **Per-Layer Embeddings (PLE):** Inyectar el embedding base en cada capa decodificadora para maximizar la retención de contexto a profundidad.
+
 ## 🧪 Notas de MLOps
 - **Checkpoint Actual:** `ckpt_sft_latest.pt` (Basado en corpus 305M).
 - **Log Estándar:** `[HH:MM:SS]` relativo al inicio del script.
