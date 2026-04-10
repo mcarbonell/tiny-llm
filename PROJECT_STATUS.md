@@ -1,21 +1,25 @@
-# 🏆 PROJECT STATUS: FASE 6 - ESCALADO A 50M (SCALE B)
-**Fecha de actualización:** 8 de Abril de 2026
-**Hito Principal:** Entrenamiento SFT del modelo de 12M verificado con éxito estructural. Inicio de pre-entrenamiento 50M.
+# 🏆 PROJECT STATUS: FASE 7 - SYSTEM 2 FOUNDATIONS (ENGLISH)
+**Fecha de actualización:** 10 de Abril de 2024
+**Hito Principal:** Transición a pipeline de datos desacoplado (Raw -> Processed) y generación de razonamiento lógico sintético en Inglés.
 
-## Estado de la Fase 5: Escalamiento de Memoria y SFT ✅ (Completada)
-Se finalizó el *Supervised Fine-Tuning* (SFT) del modelo 12M utilizando el `dataset_golden_v1.json` (806 muestras) y ventana de 1024 tokens.
-* **Resultado Analítico:** El modelo de 12M (Loss = 2.34) ha dominado el formato y comportamiento de agente (etiquetas `<THINK>`, `<TOOL_CALL>`). Las alucinaciones detectadas (p. ej. inventar "Lahorean Fejilin") certifican que el modelo es estructuralmente brillante pero cognitivamente pequeño.
-* **Conclusión:** El software de inferencia adaptado funciona. El modelo está "aprendido" sintácticamente, pero los 12 Millones de parámetros limitan el entendimiento semántico.
+## Estado de la Fase 6: Escalamiento a 50M ⏳ (En Pausa)
+El modelo de 50M (Scale B) está configurado. Se ha decidido priorizar la base cognitiva (Reasoning) antes de completar el pre-entrenamiento masivo para asegurar que el modelo aprenda a "pensar" desde las primeras etapas.
 
-## Fase Actual: Fase 6 - Capacidad y Coherencia 🚀 (En Progreso)
-Objetivo: Entrenar el modelo Scale B (50M de parámetros). Al confirmar que la arquitectura y el pipeline de datos funcionan en la subescala, la capacidad de Scale B solucionará el déficit cognitivo y las alucinaciones.
+## Fase Actual: Fase 7 - Razonamiento de Sub-escala (TinyLogic) 🚀 (En Progreso)
+Objetivo: Implementar un currículum de aprendizaje basado en razonamiento paso a paso (<think>) en Inglés, alineado con TinyStories.
 
-### Trabajos Activos:
-- Modificados `train.py` y `eval.py` para soportar carga dinámica de ficheros `.yaml` y contexto inteligente.
-- Checkpoints de Escala A asilados en `/checkpoints/scale_a_12m/` para dejar espacio a la Escala B.
-- Lanzando entrenamiento de 50 Millones de parámetros con aceleración DirectML (`configs/train_scale_b.yaml`).
+### Trabajos Realizados:
+- **Refactorización de Pipeline:** Implementado `scripts/download_raw_data.py` para separar la descarga de texto crudo (TinyStories, Wiki) de la tokenización.
+- **Generación Sintética (Inglés):** Creado `generate_rich_logic_openrouter.py` usando Gemma 4 (google/gemma-4-31b-it:free) para generar acertijos lógicos infantiles con trazas de pensamiento.
+- **Tokenización Genérica:** Desarrollado `tokenize_dataset.py` para procesar cualquier archivo RAW a BIN de forma consistente.
+- **Data Audit:** Los datasets ahora residen en `data/raw/` para inspección humana antes del entrenamiento.
 
-## Métricas Actuales (Target Escala B)
-- **Modelo:** ~50M Parámetros (`dim=512`, `n_layers=12`, `n_heads=8(GQA)`).
-- **Contexto:** 1024 Tokens.
-- **Corpus:** `train_combined.bin` (~300M tokens de TinyStories 1M + SimpleWiki).
+### Próximos Pasos (Siguiente Sesión):
+1. Definir el currículum de dificultad (Level 1 to Level 4).
+2. Generar el corpus de razonamiento (5,000+ muestras).
+3. Entrenar la Fase 3 del currículum (TinyStories + Reasoning).
+
+## Métricas y Archivos:
+- **Dataset Lógico:** `data/synthetic_logic_rich.jsonl` (English).
+- **Dataset Base:** TinyStories 200k + SimpleWiki 50k (In progress).
+- **Modelo Generador:** Gemma 4 (31B) via OpenRouter.

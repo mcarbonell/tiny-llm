@@ -25,8 +25,23 @@ def main():
     tokenizer.pre_tokenizer = ByteLevel()
     tokenizer.decoder = ByteLevelDecoder()
 
-    # Definir tokens especiales
-    special_tokens = ["<unk>", "<bos>", "<eos>", "<pad>", "<TOOL_CALL>", "</TOOL_CALL>", "<TOOL_RESULT>", "</TOOL_RESULT>", "<THINK>", "</THINK>", "[SYSTEM]", "[/SYSTEM]"]
+    # Definir tokens especiales (Inyectamos lógica y keywords como átomos)
+    special_tokens = [
+        "<unk>", "<bos>", "<eos>", "<pad>", 
+        "<TOOL_CALL>", "</TOOL_CALL>", "<TOOL_RESULT>", "</TOOL_RESULT>", 
+        "<think>", "</think>", "<erase>", "<call>", "<calc>",
+        "[SYSTEM]", "[/SYSTEM]",
+        # Keywords de programación y lógica (Atoms)
+        "if", "else", "elif", "while", "for", "return", "import", "from", "as", 
+        "def", "class", "async", "await", "try", "except", "finally",
+        "case", "switch", "break", "continue", "yield", "interface", "struct",
+        "true", "false", "None", "self", "assert", "lambda", "with", "global",
+        # Símbolos estructurales
+        "{", "}", "(", ")", "[", "]", "=", "==", "!=", ">", "<", ">=", "<=",
+        "+", "-", "*", "/", "%", "!", "&", "|", "^", "~", "&&", "||", "->",
+        # Átomos de razonamiento formal
+        "ASSERT", "VERIFY", "BECAUSE", "THEN", "STEP"
+    ]
 
     trainer = BpeTrainer(
         vocab_size=VOCAB_SIZE,
