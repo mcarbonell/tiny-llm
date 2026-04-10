@@ -18,8 +18,8 @@ En lugar de basarnos en el viejo paper de 2017, la arquitectura del Transformer 
 
 ## 🚀 Fases del Proyecto
 1. **Fase 1 - Adquisición del Lenguaje:** Pre-entrenamiento inicial con datasets limpios focalizados (como `TinyStories`) para que la red adquiera gramática impecable sin intoxicarse.
-2. **Fase 2 - Razonamiento (CoT):** Ajuste fino (*CPT*) en subconjuntos racionales para enseñar la planificación estructural mediante tags `<THINK>`.
-3. **Fase 3 - Búsqueda de Herramientas:** Condicionamiento y loop interactivo a través de sintaxis estricta, detectando tags `<TOOL_CALL>` para conectar con APIs (ej. Wikipedia / Buscadores).
+2. **Fase 2 - Razonamiento (TinyLogic):** Entrenamiento progresivo mediante un currículum de 7 niveles (habilidades cognitivas crecientes) usando trazas de pensamiento `<think>`.
+3. **Fase 3 - Agente Autónomo:** Integración de tool-calling para conectar con APIs externas.
 
 ## 🛠️ Estructura del repositorio
 - `/model`: Código de la arquitectura neuronal pura (`model.py`) y tokenizadores base.
@@ -27,7 +27,14 @@ En lugar de basarnos en el viejo paper de 2017, la arquitectura del Transformer 
 - `/data`: Submódulo para almacenamiento binario transitorio **(Ignorado en GIT)**.
 - `/tests`: Unit-tests de integridad matricial de PyTorch.
 - `/docs`: Documentos de diseño subyacentes e ideas futuras.
-- `/logs`: Histórico y analíticas de la evolución del hiperparámetro Loss durante los entrenamientos.
+- `/logs`: Histórico de métricas y analíticas.
+
+## 🎓 TinyLogic Curriculum
+Hemos implementado un sistema de aprendizaje graduado inspirado en el desarrollo humano:
+- **L0-L1 (Foundation):** Categorización y lógica concreta simple.
+- **L2-L3 (Structured):** Lógica transitiva, secuencias y deducción multi-paso.
+- **L4-L6 (Expert):** Abstracción, probabilidad bayesiana y meta-razonamiento.
+- **Enriquecimiento:** Cada muestra incluye *Habilidad Cognitiva*, *Sabor Temático* y *Estilo de Presentación* (narrativa, diálogo, reglas).
 
 ## ⚡ Quick Start
 ```bash

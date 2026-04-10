@@ -1,47 +1,58 @@
 import os
 import json
 import numpy as np
+import argparse
 from tokenizers import Tokenizer
 from tqdm import tqdm
 
-# Rutas
-TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json")
-INPUT_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "synthetic_logic_rich.jsonl")
-OUTPUT_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "synthetic_logic_rich.bin")
+# Constants
+DEFAULT_TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json")
 
 def main():
-    if not os.path.exists(TOKENIZER_PATH):
-        print("❌ Error: No se encuentra el tokenizador.")
+    parser = argparse.ArgumentParser(description="Tokenize rich reasoning JSONL data to binary.")
+    parser.add_argument("--input", type=str, default=os.path.join(os.path.dirname(__file__), "..", "data", "logic_l0.jsonl"), help="Path to input JSONL file")
+    parser.add_argument("--output", type=str, required=True, help="Path to output BIN file")
+    parser.add_argument("--tokenizer", type=str, default=DEFAULT_TOKENIZER_PATH, help="Path to tokenizer.json")
+    
+    args = parser.parse_args()
+
+    if not os.path.exists(args.tokenizer):
+        print(f"Error: Tokenizer not found at {args.tokenizer}")
         return
-    if not os.path.exists(INPUT_PATH):
-        print(f"❌ Error: No se encuentra el archivo de entrada {INPUT_PATH}")
+    if not os.path.exists(args.input):
+        print(f"Error: Input file not found at {args.input}")
         return
 
-    tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
+    tokenizer = Tokenizer.from_file(args.tokenizer)
     eos_id = tokenizer.token_to_id("<eos>") or 0
     
     all_tokens = []
-    print(f"📂 Cargando y tokenizando {INPUT_PATH}...")
+    print(f"Tokenizing {args.input}...")
     
-    with open(INPUT_PATH, "r", encoding="utf-8") as f:
+    with open(args.input, "r", encoding="utf-8") as f:
         lines = f.readlines()
         
     for line in tqdm(lines):
+        if not line.strip(): continue
         try:
             data = json.loads(line)
-            # Añadimos el prefijo de sistema para el entrenamiento
+            # System prefix to guide the model's mode (Reasoning)
             text = f"[SYSTEM] Reasoning Engine [/SYSTEM] {data['text']}"
             tokens = tokenizer.encode(text).ids
             tokens.append(eos_id)
             all_tokens.extend(tokens)
         except Exception as e:
-            print(f"⚠️ Error procesando línea: {e}")
+            print(f"Error processing line: {e}")
             continue
             
-    # Convertir a binario
-    print(f"💾 Guardando {len(all_tokens)} tokens en {OUTPUT_PATH}...")
-    np.array(all_tokens, dtype=np.uint16).tofile(OUTPUT_PATH)
-    print(f"✅ ¡Hecho! El archivo binario está listo para el entrenamiento.")
+    # Convert to binary
+    if not all_tokens:
+        print("No tokens generated. Check your input file.")
+        return
+
+    print(f"Saving {len(all_tokens):,} tokens to {args.output}...")
+    np.array(all_tokens, dtype=np.uint16).tofile(args.output)
+    print(f"Done!")
 
 if __name__ == "__main__":
     main()
