@@ -6,7 +6,7 @@ from tokenizers.trainers import BpeTrainer
 from tokenizers.pre_tokenizers import ByteLevel
 from tokenizers.decoders import ByteLevel as ByteLevelDecoder
 
-# ConfiguraciÃ³n
+# Configuración
 DATASET_NAME = "roneneldan/TinyStories"
 VOCAB_SIZE = 16384 # Vocabulario pequeÃ±o para modelo ligero
 TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json")
