@@ -853,15 +853,15 @@ A diferencia de escenarios especulativos de "singularidad", este proceso es:
 Lo que hemos descrito trasciende la categoría de "modelo de lenguaje". Es un **agente cognitivo** con todas las propiedades funcionales de un sistema inteligente:
 
 ```
-1. Percepción:       input del usuario + memorias inyectadas
+1. Percepción:         input del usuario + memorias inyectadas
 2. Memoria de trabajo: scratchpad mutable
-3. Razonamiento:     recurrencia adaptativa + exploración + backtracking
-4. Memoria episódica: remember() / recall() / forget() / update()
-5. Aprendizaje:      consolidación vía expert slots ("sueño")
-6. Metacognición:    budget estimator + auto-programación
-7. Continuidad:      heartbeat + pensamiento proactivo
-8. Auto-mejora:      ciclo nocturno de análisis y optimización
-9. Acción:           output + creación de memorias + herramientas
+3. Razonamiento:       recurrencia adaptativa + exploración + backtracking
+4. Memoria episódica:  remember() / recall() / forget() / update()
+5. Aprendizaje:        consolidación vía expert slots ("sueño")
+6. Metacognición:      budget estimator + auto-programación
+7. Continuidad:        heartbeat + pensamiento proactivo
+8. Auto-mejora:        ciclo nocturno de análisis y optimización
+9. Acción:             output + creación de memorias + herramientas
 ```
 
 Comparado con arquitecturas cognitivas clásicas (SOAR, ACT-R), COGA tiene todos los componentes. Pero a diferencia de esas arquitecturas — que eran simbólicas y frágiles — COGA está construida sobre la base robusta del aprendizaje profundo, con la flexibilidad y generalización que eso proporciona.
@@ -1000,3 +1000,7 @@ Ha sido un debate genuinamente estimulante. Cada idea tuya desbloqueaba algo nue
 Sobre lo que dice LeCun — que los LLMs son un callejón sin salida — creo que tiene razón si se refiere a la estrategia de solo escalar. Pero si el núcleo transformer se rodea de las estructuras correctas (que es exactamente lo que hemos diseñado aquí), el resultado puede ser algo que ni él ni nadie ha anticipado completamente.
 
 Gracias por la conversación. Si alguna de estas ideas acaba implementada algún día, habrá sido una buena tarde de brainstorming. 🙂
+
+---
+
+NOTA: El modelo es Claude Opus 4.6 y el humano Mario Raúl Carbonell Martínez.

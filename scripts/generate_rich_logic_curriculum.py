@@ -15,6 +15,7 @@ load_dotenv()
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 MODEL_NAME = "google/gemma-4-31b-it:free" 
+RAW_LOG_PATH = "logs/api_raw.log"
 
 if not API_KEY:
     raise ValueError("❌ OPENROUTER_API_KEY not found in .env file")
@@ -206,13 +207,17 @@ def validate_sample(text, level):
         return False
         
     # Check for reasoning connectors (especially for levels > 0)
-    reasoning_connectors = ["because", "therefore", "since", "so", "thus", "if", "then", "leads to", "conclude", "implies"]
+    # Added Spanish connectors for bilingual support
+    reasoning_connectors = [
+        "because", "therefore", "since", "so", "thus", "if", "then", "leads to", "conclude", "implies",
+        "porque", "entonces", "ya que", "por lo tanto", "así que", "si", "concluyo", "implica", "puesto que"
+    ]
     if level > 0 and not any(conn in thought.lower() for conn in reasoning_connectors):
         return False
     
     return True
 
-def get_sample(level, topic, flavor, skill, format_style):
+def get_sample(level, topic, flavor, skill, format_style, model_name=MODEL_NAME):
     prompt = get_system_prompt(level)
     
     user_instruction = (
@@ -225,7 +230,7 @@ def get_sample(level, topic, flavor, skill, format_style):
     )
     
     payload = {
-        "model": MODEL_NAME,
+        "model": model_name,
         "messages": [
             {"role": "system", "content": prompt},
             {"role": "user", "content": user_instruction}
@@ -240,15 +245,34 @@ def get_sample(level, topic, flavor, skill, format_style):
     
     try:
         response = requests.post(API_URL, json=payload, headers=headers, timeout=60)
+        
+        # Save raw log for debugging (if logs dir exists)
+        if os.path.exists("logs"):
+            with open(RAW_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(f"\n--- {time.ctime()} ---\nStatus: {response.status_code}\nModel: {model_name}\n{response.text}\n")
+        
         if response.status_code == 200:
             res_json = response.json()
             if 'choices' in res_json:
                 content = res_json['choices'][0]['message']['content']
                 if validate_sample(content, level):
                     return content
+                else:
+                    print(f"\n[Validation Failed] Step rejected for quality. Retrying...")
+            else:
+                print(f"\n[API Error] No choices in response: {res_json}")
+        elif response.status_code == 429:
+            # Check for retry-after or use a safe default for free tier
+            retry_after = response.headers.get("Retry-After")
+            wait_time = int(retry_after) if retry_after and retry_after.isdigit() else 60
+            print(f"\n[API Error] Rate limit exceeded (429). Waiting {wait_time}s before retry...")
+            time.sleep(wait_time)
+        else:
+            print(f"\n[API Error] Status {response.status_code}: {response.text}")
+            
         return None
     except Exception as e:
-        print(f"Connection error: {e}")
+        print(f"\n[Connection Error] {e}")
         return None
 
 def main():
@@ -256,11 +280,13 @@ def main():
     parser.add_argument("--level", type=int, choices=range(0, 7), default=0, help="Cognitive level to generate (0-6)")
     parser.add_argument("--target", type=int, default=10, help="Number of samples to generate")
     parser.add_argument("--output", type=str, default=None, help="Output JSONL path")
+    parser.add_argument("--model", type=str, default=MODEL_NAME, help="OpenRouter model name")
     
     args = parser.parse_args()
     
     level = args.level
     target = args.target
+    model_name = args.model
     level_name = LEVEL_SPEC[level]['name'].lower().replace(" ", "_")
     output_path = args.output or f"data/raw/synthetic_logic_{level_name}.jsonl"
     
@@ -282,7 +308,7 @@ def main():
         format_style = random.choice(FORMATS)
         skill = random.choice(REASONING_SKILLS_BY_LEVEL[level])
         
-        res = get_sample(level, topic, flavor, skill, format_style)
+        res = get_sample(level, topic, flavor, skill, format_style, model_name=model_name)
         
         if res:
             with open(output_path, "a", encoding="utf-8") as f:
