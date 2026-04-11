@@ -156,8 +156,11 @@ def main():
         
         if os.path.exists(ckpt_path):
             print(f"[Resume] Cargando progreso desde {ckpt_path}...")
-            checkpoint = torch.load(ckpt_path, map_location='cpu')
+            # En PyTorch 2.6 we need to allowlist our custom classes
+            torch.serialization.add_safe_globals([ModelArgs])
+            checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
             model.load_state_dict(checkpoint['model'])
+
             optimizer.load_state_dict(checkpoint['optimizer'])
             iter_num = checkpoint['iter_num']
             best_val_loss = checkpoint.get('val_loss', 1e9)

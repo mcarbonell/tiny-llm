@@ -1,0 +1,33 @@
+# =====================================================
+# TinyThinker — Phase 2: Child Logic (L0 + L1)
+# Objetivo: Introducir razonamiento básico dentro de contexto narrativo.
+# =====================================================
+
+# --- Modelo ---
+dim: 256
+n_layers: 6
+n_heads: 8
+n_kv_heads: 4
+vocab_size: 16384
+max_seq_len: 256 # Mantener corto para rapidez en CPU/DML
+
+# --- Entrenamiento ---
+batch_size: 16
+seq_len: 256
+max_iters: 10000 # Continuar entrenamiento
+learning_rate: 0.0005 # Learning rate más bajo para finetuning
+
+min_lr: 0.00001
+warmup_iters: 200
+eval_interval: 200
+eval_iters: 20
+weight_decay: 0.1
+grad_clip: 1.0
+grad_accum_steps: 4
+use_gradient_checkpointing: false
+
+# --- Rutas ---
+data_path: data/phase2_child_logic.bin
+checkpoint_dir: checkpoints/phase2
+tokenizer_path: model/tokenizer.json
+device: dml # Usar GPU AMD via DirectML

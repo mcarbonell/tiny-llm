@@ -10,16 +10,19 @@ Objetivo: Implementar un currículum de 5 niveles (L0 a L4) basado en razonamien
 
 ### Trabajos Realizados:
 - **Currículum Definido:** Formalizados los niveles L0 a L6.
-- **Generación Multi-Nivel:** `scripts/generate_rich_logic_curriculum.py` integrado con matriz de habilidades y formatos.
-- **Validación L6 Exitosa:** Confirmada la capacidad de Gemma 4 para generar meta-razonamiento complejo.
-- **Producción Masiva:** Iniciada la generación de 1,000 muestras "rich" para el Nivel 0.
+- **Generación Multi-Nivel:** `scripts/generate_rich_logic_curriculum.py` integrado y operativo.
+- **L0 y L1 Completados:** Generadas 1,000 muestras "rich" para cada nivel (100% target).
+- **Tokenización Rich:** L0 y L1 convertidos a `.bin` con prefijo `[SYSTEM] Reasoning Engine`.
+- **Fase 2 Preparada:** Generado `phase2_child_logic.bin` (5M tokens, 30% logic mixture).
+- **Producción en Curso:** Generando L2 (60% aprox) y L3 (Iniciado).
 
 ### Próximos Pasos (Siguiente Sesión):
-1. Completar la generación del currículum (L0 a L3).
-2. Entrenar la **Fase 2 (Child Logic)** usando interleaving de TinyStories + L0/L1.
-3. Evaluar la coherencia del pensamiento `<think>` en inferencia.
+1. Iniciar entrenamiento de la **Fase 2 (Child Logic)** usando `phase2_child_logic.bin`.
+2. Completar la generación de L2 y L3 (Target 1,000 cada uno).
+3. Evaluar la coherencia del pensamiento `<think>` en inferencia tras Phase 2.
 
 ## Métricas y Archivos:
-- **Dataset Lógico:** `data/raw/synthetic_logic_foundation_rich.jsonl` (In progress).
-- **Phases:** `phase1_grammar.bin`, `phase2_child_logic.bin` (Generated).
-- **Estrategia:** Interleaving y Progresividad cognitiva.
+- **Dataset Lógico:** `data/logic_l0.bin` (88k tokens), `data/logic_l1.bin` (121k tokens).
+- **Phases:** `phase2_child_logic.bin` (Ready for training).
+- **Estrategia:** Interleaving (70% stories, 15% L0, 15% L1).
+
