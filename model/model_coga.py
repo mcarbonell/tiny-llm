@@ -22,7 +22,12 @@ class ModelArgs:
     top_k: int = 2
     n_reserved: int = 4
     # COGA Scratchpad Args (Phase 2)
-    n_scratch_slots: int = 32   # Número de slots en la RAM editable
+    n_scratch_slots: int = 32   
+    # COGA Recurrence Args (Phase 4)
+    n_pre_layers: int = 2       # Capas de parsing superficial
+    n_core_layers: int = 4      # Capas recurrentes (razonamiento)
+    n_post_layers: int = 2      # Capas de salida
+    max_recurrence_steps: int = 4 # Número máximo de veces que se repite el core
     # LoRA
     lora_r: int = 0             
     lora_alpha: float = 16.0     
@@ -240,12 +245,19 @@ class TinyThinkerCOGA(nn.Module):
         super().__init__()
         self.args = args
         self.vocab_size = args.vocab_size
-        self.n_layers = args.n_layers
         self.dim = args.dim
         self.n_scratch_slots = args.n_scratch_slots
         
         self.tok_embeddings = nn.Embedding(args.vocab_size, args.dim)
-        self.layers = nn.ModuleList([TransformerBlock(args) for _ in range(args.n_layers)])
+        
+        # [COGA Phase 4] División Funcional (Pre, Core, Post)
+        self.pre_layers = nn.ModuleList([TransformerBlock(args) for _ in range(args.n_pre_layers)])
+        self.core_layers = nn.ModuleList([TransformerBlock(args) for _ in range(args.n_core_layers)])
+        self.post_layers = nn.ModuleList([TransformerBlock(args) for _ in range(args.n_post_layers)])
+        
+        # [COGA Phase 4] Halt Head: Estima la dificultad del razonamiento (0 a 1)
+        self.halt_head = nn.Linear(args.dim, 1)
+        
         self.norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.output = nn.Linear(args.dim, args.vocab_size, bias=False)
         self.tok_embeddings.weight = self.output.weight
@@ -257,12 +269,12 @@ class TinyThinkerCOGA(nn.Module):
         bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
         
-        # [COGA] Si no se provee un scratchpad, inicializamos uno vacío con ceros.
         if scratchpad is None:
             scratchpad = torch.zeros(bsz, self.n_scratch_slots, self.dim, device=tokens.device, dtype=h.dtype)
             
         past_len = 0
         if past_key_values:
+            # En COGA Phase 4, past_key_values tiene la longitud: pre + core + post
             past_len = past_key_values[0][0].shape[2]
         freqs_cis = self.freqs_cis[past_len:past_len + seqlen]
         
@@ -273,14 +285,63 @@ class TinyThinkerCOGA(nn.Module):
             mask = mask.masked_fill(bool_mask, float('-inf'))
             
         past_key_values_out = []
-        for i, layer in enumerate(self.layers):
-            past_kv = past_key_values[i] if past_key_values else None
+        layer_idx = 0
+        
+        # 1. PRE-LAYERS (Parsing Superficial)
+        for layer in self.pre_layers:
+            past_kv = past_key_values[layer_idx] if past_key_values else None
             layer_out = layer(h, freqs_cis, mask, scratchpad, past_kv, use_cache=use_cache, train_reserved=train_reserved)
             if isinstance(layer_out, tuple):
                 h, past_kv_out = layer_out
                 past_key_values_out.append(past_kv_out)
             else:
                 h = layer_out
+            layer_idx += 1
+            
+        # 2. BUDGET ESTIMATION (Halt Head)
+        # Tomamos la representación actual del último token para decidir el presupuesto
+        halt_logits = self.halt_head(h[:, -1:, :]) # (bsz, 1, 1)
+        halt_prob = torch.sigmoid(halt_logits).squeeze(-1) # (bsz, 1)
+        
+        # En inferencia (bsz=1) calculamos el budget. En pre-entrenamiento forzamos iteraciones.
+        steps_to_run = self.args.max_recurrence_steps
+        if not self.training and bsz == 1:
+            # Estrategia de paro adaptativo: a menor halt_prob, más pasos.
+            # Convertimos la prob (0 a 1) en pasos (1 a max_recurrence_steps)
+            estimated_steps = max(1, round((1.0 - halt_prob.item()) * self.args.max_recurrence_steps))
+            steps_to_run = estimated_steps
+            
+        # 3. CORE-LAYERS (Universal Transformer / Bucle Recurrente)
+        for step in range(steps_to_run):
+            core_layer_idx_start = layer_idx
+            for layer in self.core_layers:
+                # Solo guardamos el KV-cache de la ÚLTIMA iteración para no inflar la memoria
+                is_last_step = (step == steps_to_run - 1)
+                use_cache_here = use_cache and is_last_step
+                
+                past_kv = past_key_values[core_layer_idx_start] if past_key_values else None
+                layer_out = layer(h, freqs_cis, mask, scratchpad, past_kv, use_cache=use_cache_here, train_reserved=train_reserved)
+                
+                if isinstance(layer_out, tuple):
+                    h, past_kv_out = layer_out
+                    if is_last_step:
+                        past_key_values_out.append(past_kv_out)
+                else:
+                    h = layer_out
+                core_layer_idx_start += 1
+                
+        layer_idx += self.args.n_core_layers
+        
+        # 4. POST-LAYERS (Output)
+        for layer in self.post_layers:
+            past_kv = past_key_values[layer_idx] if past_key_values else None
+            layer_out = layer(h, freqs_cis, mask, scratchpad, past_kv, use_cache=use_cache, train_reserved=train_reserved)
+            if isinstance(layer_out, tuple):
+                h, past_kv_out = layer_out
+                past_key_values_out.append(past_kv_out)
+            else:
+                h = layer_out
+            layer_idx += 1
                 
         h = self.norm(h)
         logits = self.output(h)
