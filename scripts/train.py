@@ -12,7 +12,9 @@ import argparse
 
 # Agregar ruta base para resolver el import del modelo
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from model.model import TinyThinker, ModelArgs
+from model.model import TinyThinker, ModelArgs as DenseArgs
+from model.model_moe import TinyThinkerMoE, ModelArgs as MoEArgs
+from model.model_coga import TinyThinkerCOGA, ModelArgs as CogaArgs
 
 # ----------------------------------
 # Configuración por Defecto
@@ -33,6 +35,7 @@ import yaml
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyThinker Pretrain — Versión Optimizada")
     parser.add_argument('--config', type=str, default=None, help='Ruta al config YAML. Sobreescribe otros argumentos.')
+    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga'], help='Arquitectura a entrenar.')
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'dml', 'mps'], help='Dispositivo de entrenamiento.')
     parser.add_argument('--resume', action='store_true', help='Reanudar desde el último checkpoint.')
     parser.add_argument('--max_iters', type=int, default=DEFAULT_MAX_ITERS, help='Número total de iteraciones.')
@@ -127,19 +130,52 @@ def main():
     out_dir = getattr(args_cli, 'checkpoint_dir', "checkpoints")
     os.makedirs(out_dir, exist_ok=True)
     
-    model_args = ModelArgs(
-        dim=getattr(args_cli, 'dim', 256),
-        n_layers=getattr(args_cli, 'n_layers', 6),
-        n_heads=getattr(args_cli, 'n_heads', 8),
-        n_kv_heads=getattr(args_cli, 'n_kv_heads', 4),
-        vocab_size=getattr(args_cli, 'vocab_size', 16384),
-        max_seq_len=getattr(args_cli, 'max_seq_len', getattr(args_cli, 'seq_len', 1024))
-    )
-    model = TinyThinker(model_args)
+    arch = getattr(args_cli, 'arch', 'dense')
+    
+    common_args = {
+        'dim': getattr(args_cli, 'dim', 256),
+        'n_layers': getattr(args_cli, 'n_layers', 6),
+        'n_heads': getattr(args_cli, 'n_heads', 8),
+        'n_kv_heads': getattr(args_cli, 'n_kv_heads', 4),
+        'vocab_size': getattr(args_cli, 'vocab_size', 16384),
+        'max_seq_len': getattr(args_cli, 'max_seq_len', getattr(args_cli, 'seq_len', 1024))
+    }
+    
+    if arch == 'dense':
+        model_args = DenseArgs(**common_args)
+        model = TinyThinker(model_args)
+    elif arch == 'moe':
+        moe_args = common_args.copy()
+        moe_args['n_experts'] = getattr(args_cli, 'n_experts', 8)
+        moe_args['top_k'] = getattr(args_cli, 'top_k', 2)
+        moe_args['n_reserved'] = getattr(args_cli, 'n_reserved', 4)
+        model_args = MoEArgs(**moe_args)
+        model = TinyThinkerMoE(model_args)
+    elif arch == 'coga':
+        coga_args = common_args.copy()
+        coga_args.pop('n_layers', None) # COGA usa n_pre, n_core, n_post
+        coga_args['n_pre_layers'] = getattr(args_cli, 'n_pre_layers', 1)
+        coga_args['n_core_layers'] = getattr(args_cli, 'n_core_layers', 2)
+        coga_args['n_post_layers'] = getattr(args_cli, 'n_post_layers', 1)
+        coga_args['max_recurrence_steps'] = getattr(args_cli, 'max_recurrence_steps', 4)
+        coga_args['n_scratch_slots'] = getattr(args_cli, 'n_scratch_slots', 32)
+        coga_args['n_experts'] = getattr(args_cli, 'n_experts', 8)
+        coga_args['top_k'] = getattr(args_cli, 'top_k', 2)
+        coga_args['n_reserved'] = getattr(args_cli, 'n_reserved', 4)
+        model_args = CogaArgs(**coga_args)
+        model = TinyThinkerCOGA(model_args)
+    else:
+        raise ValueError(f"Arquitectura desconocida: {arch}")
+        
     model.to(device)
     
     if args_cli.use_gradient_checkpointing:
-        for layer in model.layers: layer.use_checkpoint = True
+        if arch == 'coga':
+            for layer in model.pre_layers: layer.use_checkpoint = True
+            for layer in model.core_layers: layer.use_checkpoint = True
+            for layer in model.post_layers: layer.use_checkpoint = True
+        else:
+            for layer in model.layers: layer.use_checkpoint = True
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args_cli.lr, weight_decay=1e-1)
     
@@ -157,7 +193,7 @@ def main():
         if os.path.exists(ckpt_path):
             print(f"[Resume] Cargando progreso desde {ckpt_path}...")
             # En PyTorch 2.6 we need to allowlist our custom classes
-            torch.serialization.add_safe_globals([ModelArgs])
+            torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs])
             checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
             model.load_state_dict(checkpoint['model'])
 
@@ -251,6 +287,7 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
                 'optimizer': optimizer.state_dict(),
                 'iter_num': iter_num,
                 'args': model_args,
+                'arch': arch,
                 'val_loss': losses['val']
             }
             torch.save(checkpoint, os.path.join(out_dir, 'ckpt_pretrain_latest.pt'))
