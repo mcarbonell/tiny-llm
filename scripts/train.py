@@ -60,6 +60,46 @@ def load_config(args):
         
     return args
 
+class DMLAdamW(torch.optim.Optimizer):
+    """
+    Optimizador AdamW personalizado para DirectML.
+    Evita la operación 'aten::lerp.Scalar_out' que causa fallbacks masivos a CPU y NaNs en AMD iGPUs.
+    """
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=1e-2):
+        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
+        super().__init__(params, defaults)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        for group in self.param_groups:
+            for p in group['params']:
+                if p.grad is None: continue
+                grad = p.grad
+                state = self.state[p]
+                if len(state) == 0:
+                    state['step'] = 0
+                    state['exp_avg'] = torch.zeros_like(p)
+                    state['exp_avg_sq'] = torch.zeros_like(p)
+                
+                exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
+                beta1, beta2 = group['betas']
+                state['step'] += 1
+                
+                # Weight decay (AdamW)
+                p.mul_(1 - group['lr'] * group['weight_decay'])
+                
+                # Momentums sin usar lerp_
+                exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+                
+                bias_correction1 = 1 - beta1 ** state['step']
+                bias_correction2 = 1 - beta2 ** state['step']
+                
+                step_size = group['lr'] / bias_correction1
+                denom = (exp_avg_sq.sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
+                
+                p.addcdiv_(exp_avg, denom, value=-step_size)
+
 def main():
     args_cli = parse_args()
     args_cli = load_config(args_cli)
@@ -88,8 +128,11 @@ def main():
     # Setup de Precisión Mixta (AMP)
     _is_dml = str(device).startswith('dml') or 'privateuseone' in str(device)
     if _is_dml:
+        # DirectML suele ser inestable con FP16/BF16 en iGPUs AMD integradas
+        # Forzamos Float32 para máxima estabilidad y evitar NaNs
         ctx = contextlib.nullcontext()
         ptdtype = torch.float32
+        print("[Hardware] Forzando Float32 para estabilidad en DirectML")
     elif device == 'cuda':
         ptdtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
         ctx = torch.amp.autocast(device_type='cuda', dtype=ptdtype)
@@ -179,7 +222,12 @@ def main():
         else:
             for layer in model.layers: layer.use_checkpoint = True
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args_cli.lr, weight_decay=1e-1)
+    # En DirectML, foreach=True (por defecto) causa fallback a CPU y NaNs.
+    if _is_dml:
+        print("[Optimizador] Usando DMLAdamW personalizado sin 'lerp_' para máxima compatibilidad con AMD")
+        optimizer = DMLAdamW(model.parameters(), lr=args_cli.lr, weight_decay=1e-1)
+    else:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args_cli.lr, weight_decay=1e-1, foreach=False)
     
     iter_num = 0
     best_val_loss = 1e9

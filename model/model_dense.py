@@ -199,8 +199,9 @@ class TinyThinker(nn.Module):
 
         mask = None
         if seqlen > 1:
-            mask = torch.full((seqlen, seqlen), float("-inf"), device=tokens.device, dtype=h.dtype)
-            mask = torch.triu(mask, diagonal=1)
+            mask = torch.zeros(seqlen, seqlen, device=tokens.device, dtype=h.dtype)
+            bool_mask = torch.ones(seqlen, seqlen, device=tokens.device, dtype=torch.bool).tril(diagonal=0).logical_not()
+            mask = mask.masked_fill(bool_mask, float("-inf"))
             mask = mask.view(1, 1, seqlen, seqlen)
 
         new_kvs = []

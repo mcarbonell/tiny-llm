@@ -1,44 +1,41 @@
 import torch
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from model.model import TinyThinker
-from tokenizers import Tokenizer
+import torch_directml
+from model.model import TinyThinker, ModelArgs
+import time
 
-def resolve_checkpoint():
-    candidates = [
-        "checkpoints/ckpt_base_corpus305M_v2.pt",
-        "checkpoints/ckpt_base_300M_v2.pt",
-        "checkpoints/old/ckpt_first_pretraining.pt",
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            return path
-    raise FileNotFoundError("No se encontró un checkpoint base válido.")
+def debug_full_model():
+    device = torch_directml.device()
+    print(f"✅ Dispositivo: {device}")
 
-CKPT_PATH = resolve_checkpoint()
-TOKENIZER_PATH = "model/tokenizer.json"
+    args = ModelArgs(dim=512, n_layers=12, n_heads=8, n_kv_heads=4, max_seq_len=512, vocab_size=16384)
+    model = TinyThinker(args).to(device)
 
-tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
-checkpoint = torch.load(CKPT_PATH, map_location='cpu', weights_only=False)
-model = TinyThinker(checkpoint['args'])
-model.load_state_dict(checkpoint['model'])
-model.eval()
+    x = torch.randint(0, 16384, (4, 512), device=device)
+    y = torch.randint(0, 16384, (4, 512), device=device)
 
-prompt = "Once upon a time"
-ids = tokenizer.encode(prompt).ids
-x = torch.tensor([ids], dtype=torch.long)
+    print("\n--- Ejecutando Forward Completo ---")
+    t0 = time.time()
+    logits, loss = model(x, targets=y)
+    
+    print(f"Tiempo Forward: {time.time()-t0:.2f}s")
+    print(f"¿Logits NaN?: {torch.isnan(logits).any().item()}")
+    print(f"Valor del Loss: {loss.item()}")
+    print(f"¿Loss NaN?: {torch.isnan(loss).item()}")
 
-with torch.no_grad():
-    logits = model(x)
-    logits = logits[:, -1, :]
-    probs = torch.nn.functional.softmax(logits, dim=-1)
-    top_probs, top_ids = torch.topk(probs, 5)
+    print("\n--- Ejecutando Backward ---")
+    t0 = time.time()
+    loss.backward()
+    print(f"Tiempo Backward: {time.time()-t0:.2f}s")
 
-print(f"Prompt: {prompt}")
-print("\nTop 5 predictions:")
-for i in range(5):
-    token_id = top_ids[0, i].item()
-    prob = top_probs[0, i].item()
-    token_text = tokenizer.decode([token_id], skip_special_tokens=False)
-    print(f"ID {token_id:5d} | Prob {prob:.4f} | Token: {repr(token_text)}")
+    nan_found = False
+    for name, p in model.named_parameters():
+        if p.grad is not None and torch.isnan(p.grad).any():
+            nan_found = True
+            print(f"⚠️ NaN en gradiente de: {name}")
+            break
+            
+    if not nan_found:
+        print("✅ Gradientes limpios. El modelo es 100% estable en DirectML.")
+
+if __name__ == "__main__":
+    debug_full_model()

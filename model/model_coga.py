@@ -225,8 +225,9 @@ class TinyThinkerCOGA(nn.Module):
         freqs_cis = self.freqs_cis[past_len:past_len + seqlen]
         mask = None
         if seqlen > 1 and past_key_values is None:
-            mask = torch.full((seqlen, seqlen), float("-inf"), device=tokens.device, dtype=h.dtype)
-            mask = torch.triu(mask, diagonal=1).view(1, 1, seqlen, seqlen)
+            mask = torch.zeros(seqlen, seqlen, device=tokens.device, dtype=h.dtype)
+            bool_mask = torch.ones(seqlen, seqlen, device=tokens.device, dtype=torch.bool).tril(diagonal=0).logical_not()
+            mask = mask.masked_fill(bool_mask, float("-inf")).view(1, 1, seqlen, seqlen)
         past_key_values_out = []
         layer_idx = 0
         for layer in self.pre_layers:
