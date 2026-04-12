@@ -27,16 +27,23 @@ Objetivo: Reducir las alucinaciones y mejorar la síntesis de información.
     *   Evaluar el impacto en la latencia de CPU.
     *   Comprobar si la mayor capacidad soluciona el "ruido" en las respuestas largas.
 
-## 🚀 Fase 7: Arquitectura Avanzada (Inspiración Gemma 4)
+## 🚀 Fase 7: Arquitectura Avanzada y Cognitiva (COGA)
 Objetivo: Implementar eficiencia arquitectónica para superar la limitación teórica de parámetros asumiendo el mismo coste computacional.
 
-### P0 - Latent Reasoning Integrado
-1.  **Aprovechamiento Sintético:** Validación del rendimiento del dataset `dataset_golden_v1.json` que ya cuenta con los tags `<think>` nativos.
-2.  **Métricas:** Evaluar precisión en toma de decisiones *Zero-Shot* post-entrenamiento.
+### ✅ P0 - Base Arquitectónica COGA (Completado)
+1.  **Modularidad (MoE):** Creada arquitectura de "Expert Slots" (`model_moe.py`) para evitar olvido catastrófico.
+2.  **Memoria de Trabajo:** Implementado RAM editable (`Scratchpad`) sin consumo de contexto (`model_coga.py`).
+3.  **Sabiduría (MemoryBank):** Creada base de datos vectorial nativa para recuperación a largo plazo (`memory.py`).
+4.  **Profundidad Adaptativa:** Implementado bucle Universal Transformer y estimador `Halt Head` para adaptar compute por token.
+5.  **Autonomía:** Desarrollado script de ciclo nocturno para auto-finetuning basado en errores detectados en logs diarios.
 
-### P1 - Refactorización de Arquitectura
-1.  **MicroMoE (Mixture of Experts):** Desarrollar capa FFN distribuida (ej. 16/32 expertos, Top-2 routing) para el siguiente escalón de parámetros tras la ejecución densa actual (~78M).
-2.  **Per-Layer Embeddings (PLE):** Inyectar el embedding base en cada capa decodificadora para maximizar la retención de contexto a profundidad.
+### P1 - Validación Empírica COGA
+1.  **Entrenamiento MoE Base:** Entrenar MoE y comparar con el baseline denso (actualmente en curso).
+2.  **Validación de Componentes:** Probar empíricamente el Scratchpad, RAG Dinámico y Paro Adaptativo según el plan `docs/COGA_VALIDATION_PLAN.md`.
+3.  **Currículum de Razonamiento:** Reanudar el entrenamiento de las fases lógicas (L2, L3) usando la nueva arquitectura COGA para enseñar al modelo a utilizar `<WRITE>`.
+
+### P2 - Refactorización y Soporte
+1.  **Soporte Universal:** Consolidar el entrenamiento (`train.py`) y chat (`chat.py`) para soportar dinámicamente cualquier arquitectura (dense, moe, coga). *(Completado)*
 
 ## 🧪 Notas de MLOps
 - **Checkpoint Actual:** `ckpt_sft_latest.pt` (Basado en corpus 305M).

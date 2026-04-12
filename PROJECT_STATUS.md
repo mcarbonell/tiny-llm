@@ -1,28 +1,29 @@
-# 🏆 PROJECT STATUS: FASE 7 - SYSTEM 2 FOUNDATIONS (ENGLISH)
-**Fecha de actualización:** 10 de Abril de 2024
-**Hito Principal:** Transición a pipeline de datos desacoplado (Raw -> Processed) y generación de razonamiento lógico sintético en Inglés.
+# 🏆 PROJECT STATUS: FASE 7 - COGA SYSTEM FOUNDATIONS (ENGLISH)
+**Fecha de actualización:** 11 de Abril de 2026
+**Hito Principal:** Implementación de la Arquitectura de Sistema Operativo Cognitivo (COGA) Fases 1 a 5 completada.
 
 ## Estado de la Fase 6: Escalamiento a 50M ⏳ (En Pausa)
-El modelo de 50M (Scale B) está configurado. Se ha decidido priorizar la base cognitiva (Reasoning) antes de completar el pre-entrenamiento masivo para asegurar que el modelo aprenda a "pensar" desde las primeras etapas.
+El modelo de 50M (Scale B) está configurado. Se ha decidido priorizar la base cognitiva (Reasoning y COGA) antes de completar el pre-entrenamiento masivo para asegurar que el modelo aprenda a "pensar" desde las primeras etapas y aproveche la nueva eficiencia estructural.
 
-## Fase Actual: Fase 7 - Razonamiento de Sub-escala (TinyLogic) 🚀 (En Progreso)
-Objetivo: Implementar un currículum de 5 niveles (L0 a L4) basado en razonamiento paso a paso (<think>) en Inglés, alineado con TinyStories.
+## Fase Actual: Fase 7 - Razonamiento de Sub-escala y Arquitectura COGA 🚀 (En Progreso)
+Objetivo: Implementar un currículum de razonamiento paso a paso e integrar las fundaciones de la arquitectura COGA (Cognitive Operating System Architecture) para superar las limitaciones de los LLM densos tradicionales.
 
-### Trabajos Realizados:
-- **Currículum Definido:** Formalizados los niveles L0 a L6.
-- **Generación Multi-Nivel:** `scripts/generate_rich_logic_curriculum.py` integrado y operativo.
-- **L0 y L1 Completados:** Generadas 1,000 muestras "rich" para cada nivel (100% target).
-- **Tokenización Rich:** L0 y L1 convertidos a `.bin` con prefijo `[SYSTEM] Reasoning Engine`.
-- **Fase 2 Preparada:** Generado `phase2_child_logic.bin` (5M tokens, 30% logic mixture).
-- **Producción en Curso:** Generando L2 (60% aprox) y L3 (Iniciado).
+### Trabajos Realizados (COGA):
+- **Fase 1 (Modularidad):** Creada arquitectura MoE (`model_moe.py`) con "Expert Slots" reservados para mitigar el olvido catastrófico.
+- **Fase 2 (Motor de Deliberación):** Implementada RAM editable (`Scratchpad`) en `model_coga.py` con Cross-Attention bidireccional. Creado generador de dataset sintético para primitivas `<WRITE>`.
+- **Fase 3 (Sabiduría):** Implementado `MemoryBank` nativo (`memory.py`) para recuperación de recuerdos y RAG dinámico inyectado en el Scratchpad.
+- **Fase 4 (Profundidad Adaptativa):** Integrado `Halt Head` y bucle Universal Transformer para escalar el compute en tiempo de inferencia según la dificultad del token.
+- **Fase 5 (Autonomía):** Desarrollado el script de "sueño artificial" (`night_cycle.py`) que lee los logs, detecta correcciones y prepara auto-finetuning.
+- **Soporte Universal:** Refactorizados `train.py` y `chat.py` para soportar dinámicamente modelos `--arch dense`, `moe` y `coga`.
 
-### Próximos Pasos (Siguiente Sesión):
-1. Iniciar entrenamiento de la **Fase 2 (Child Logic)** usando `phase2_child_logic.bin`.
-2. Completar la generación de L2 y L3 (Target 1,000 cada uno).
-3. Evaluar la coherencia del pensamiento `<think>` en inferencia tras Phase 2.
+### Próximos Pasos (Siguiente Sesión - Validación Empírica):
+1. **Esperar** a que termine el pre-entrenamiento actual en la GPU (Baseline Denso).
+2. Ejecutar la **Fase 1 Empírica** descrita en `docs/COGA_VALIDATION_PLAN.md` (Entrenar el modelo MoE y comparar su loss con el baseline).
+3. Evaluar el "Olvido Catastrófico" entrenando un Expert Slot especializado.
+4. Continuar con la generación del currículum L2 y L3.
 
 ## Métricas y Archivos:
-- **Dataset Lógico:** `data/logic_l0.bin` (88k tokens), `data/logic_l1.bin` (121k tokens).
-- **Phases:** `phase2_child_logic.bin` (Ready for training).
-- **Estrategia:** Interleaving (70% stories, 15% L0, 15% L1).
+- **Baseline Training:** Corriendo actualmente (`logs/train_...`).
+- **Arquitecturas disponibles:** `model_dense.py`, `model_moe.py`, `model_coga.py`.
+- **Plan de Validación:** `docs/COGA_VALIDATION_PLAN.md`.
 
