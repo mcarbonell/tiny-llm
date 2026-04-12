@@ -29,12 +29,18 @@ En lugar de basarnos en el viejo paper de 2017, la arquitectura del Transformer 
 - `/docs`: Documentos de diseño subyacentes e ideas futuras.
 - `/logs`: Histórico de métricas y analíticas.
 
-## 🎓 TinyLogic Curriculum
-Hemos implementado un sistema de aprendizaje graduado inspirado en el desarrollo humano:
-- **L0-L1 (Foundation):** Categorización y lógica concreta simple.
-- **L2-L3 (Structured):** Lógica transitiva, secuencias y deducción multi-paso.
-- **L4-L6 (Expert):** Abstracción, probabilidad bayesiana y meta-razonamiento.
-- **Enriquecimiento:** Cada muestra incluye *Habilidad Cognitiva*, *Sabor Temático* y *Estilo de Presentación* (narrativa, diálogo, reglas).
+## 🎓 TinyLogic & Planning Curriculum
+Hemos implementado un sistema de aprendizaje graduado inspirado en el desarrollo humano, consolidando un corpus sintético de alta diversidad:
+
+- **Logic Pipeline (3,528 muestras):**
+    - **L0-L1 (Foundation):** Categorización y lógica concreta simple.
+    - **L2-L3 (Structured):** Lógica transitiva, secuencias y deducción multi-paso.
+    - **L4 (Advanced):** Abstracción, razonamiento probabilístico y meta-lógica.
+- **Planning Domain (163 muestras):**
+    - **Agentic (COGA):** Razonamiento sobre primitivas de memoria, scratchpad y herramientas.
+    - **Technical/Creative/Household:** Descomposición de tareas complejas en planes de ejecución lógicos.
+
+**Deduplicación:** Todo el dataset ha sido procesado mediante `scripts/deduplicate_dataset.py` usando embeddings semánticos (`all-MiniLM-L6-v2`) para garantizar que la red no aprenda de redundancias sintéticas.
 
 ## ⚡ Quick Start
 ```bash
