@@ -10,7 +10,9 @@ from tokenizers import Tokenizer
 
 # Añadir ruta base para resolver import del modelo
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from model.model import TinyThinker, ModelArgs
+from model.model import TinyThinker, ModelArgs as DenseArgs
+from model.model_moe import TinyThinkerMoE, ModelArgs as MoEArgs
+from model.model_coga import TinyThinkerCOGA, ModelArgs as CogaArgs
 
 # -----------------
 # Configuración
@@ -270,10 +272,20 @@ def main():
     tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
 
     print("Despertando a TinyThinker desde el disco...")
+    torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs])
     checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
     model_args = checkpoint['args']
+    arch = checkpoint.get('arch', 'dense')
 
-    model = TinyThinker(model_args)
+    if arch == 'dense':
+        model = TinyThinker(model_args)
+    elif arch == 'moe':
+        model = TinyThinkerMoE(model_args)
+    elif arch == 'coga':
+        model = TinyThinkerCOGA(model_args)
+    else:
+        raise ValueError(f"Arquitectura desconocida en checkpoint: {arch}")
+
     model.load_state_dict(checkpoint['model'], strict=False)
     model.eval()
     model.to(DEVICE)
