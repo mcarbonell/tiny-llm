@@ -21,7 +21,7 @@ class ModelArgs:
     n_experts: int = 8          # Total de expertos
     top_k: int = 2              # Expertos activos por token
     n_reserved: int = 4         # Slots reservados (COGA Phase 1)
-    # LoRA (heredado de model_dense)
+    # LoRA
     lora_r: int = 0             
     lora_alpha: float = 16.0     
     lora_dropout: float = 0.0    
@@ -99,14 +99,12 @@ class LoRALinear(nn.Module):
         return result
 
 class Expert(nn.Module):
-    """Un experto individual (FFN estándar SwiGLU)"""
     def __init__(self, dim: int, hidden_dim: int, multiple_of: int, ffn_dim_multiplier: float):
         super().__init__()
         hidden_dim = int(2 * hidden_dim / 3)
         if ffn_dim_multiplier is not None:
             hidden_dim = int(ffn_dim_multiplier * hidden_dim)
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
-
         self.w1 = nn.Linear(dim, hidden_dim, bias=False)
         self.w2 = nn.Linear(hidden_dim, dim, bias=False)
         self.w3 = nn.Linear(dim, hidden_dim, bias=False)
@@ -115,61 +113,35 @@ class Expert(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
 class MoEFeedForward(nn.Module):
-    """Capa Mixture of Experts con soporte para Slots Reservados (COGA)"""
     def __init__(self, args: ModelArgs):
         super().__init__()
         self.dim = args.dim
         self.n_experts = args.n_experts
         self.top_k = args.top_k
         self.n_reserved = args.n_reserved
-        
-        # Router: Proyecta el input al espacio de expertos
         self.gate = nn.Linear(args.dim, args.n_experts, bias=False)
-        
-        # Lista de expertos
         self.experts = nn.ModuleList([
-            Expert(
-                dim=args.dim,
-                hidden_dim=4 * args.dim,
-                multiple_of=args.multiple_of,
-                ffn_dim_multiplier=args.ffn_dim_multiplier
-            ) for _ in range(args.n_experts)
+            Expert(dim=args.dim, hidden_dim=4 * args.dim, multiple_of=args.multiple_of, ffn_dim_multiplier=args.ffn_dim_multiplier)
+            for _ in range(args.n_experts)
         ])
 
     def forward(self, x: torch.Tensor, train_reserved: bool = False):
         batch_size, seq_len, dim = x.shape
         x_flat = x.view(-1, dim)
-        
-        # Logits del router
         gate_logits = self.gate(x_flat)
-        
-        # [COGA] Lógica de Slots Reservados:
-        # Si no estamos entrenando los slots reservados, ponemos su probabilidad a -inf
         if not train_reserved and self.n_reserved > 0:
-            # Los últimos 'n_reserved' expertos están bloqueados
             mask = torch.zeros_like(gate_logits)
             mask[:, -self.n_reserved:] = float('-inf')
             gate_logits = gate_logits + mask
-            
-        # Pesos y selección de Top-K expertos
         weights = F.softmax(gate_logits, dim=-1)
         top_weights, top_indices = torch.topk(weights, self.top_k, dim=-1)
         top_weights = top_weights / top_weights.sum(dim=-1, keepdim=True)
-        
-        # Ejecución de expertos
         out = torch.zeros_like(x_flat)
-        
-        # Optimizamos agrupando tokens por experto para evitar loops lentos de Python
         for i in range(self.n_experts):
-            # Encontrar tokens asignados a este experto en cualquiera de sus k posiciones
-            # (token_idx, k_idx)
             token_indices, k_indices = (top_indices == i).nonzero(as_tuple=True)
-            
             if token_indices.numel() > 0:
                 expert_out = self.experts[i](x_flat[token_indices])
-                # Multiplicar por el peso correspondiente
                 out[token_indices] += top_weights[token_indices, k_indices].unsqueeze(-1) * expert_out
-                
         return out.view(batch_size, seq_len, dim)
 
 class Attention(nn.Module):
@@ -197,18 +169,14 @@ class Attention(nn.Module):
         if self.n_rep > 1:
             xk = xk[:, :, :, None, :].expand(bsz, seqlen, self.n_local_kv_heads, self.n_rep, self.head_dim).flatten(2, 3)
             xv = xv[:, :, :, None, :].expand(bsz, seqlen, self.n_local_kv_heads, self.n_rep, self.head_dim).flatten(2, 3)
-        xq = xq.transpose(1, 2)
-        xk = xk.transpose(1, 2)
-        xv = xv.transpose(1, 2)
+        xq, xk, xv = xq.transpose(1, 2), xk.transpose(1, 2), xv.transpose(1, 2)
         if past_key_value is not None:
             past_key, past_value = past_key_value
             xk = torch.cat([past_key, xk], dim=2)
             xv = torch.cat([past_value, xv], dim=2)
-        scores = torch.matmul(xq, xk.transpose(2, 3)) / math.sqrt(self.head_dim)
-        if mask is not None:
-            scores = scores + mask
-        scores = F.softmax(scores.float(), dim=-1).type_as(xq)
-        output = torch.matmul(scores, xv)
+            
+        # OPTIMIZACIÓN: Scaled Dot Product Attention
+        output = F.scaled_dot_product_attention(xq, xk, xv, attn_mask=mask, dropout_p=0.0, is_causal=False)
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
         return self.wo(output), (xk, xv)
 
@@ -216,7 +184,7 @@ class TransformerBlock(nn.Module):
     def __init__(self, args: ModelArgs):
         super().__init__()
         self.attention = Attention(args)
-        self.feed_forward = MoEFeedForward(args) # Sustituido por MoE
+        self.feed_forward = MoEFeedForward(args)
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.use_checkpoint = False
@@ -224,11 +192,8 @@ class TransformerBlock(nn.Module):
     def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: torch.Tensor, past_key_value=None, use_cache: bool = False, train_reserved: bool = False):
         attn_out, new_kv = self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)
         h = x + attn_out
-        
-        # Pasamos flag train_reserved a la capa MoE
         ffn_out = self.feed_forward(self.ffn_norm(h), train_reserved=train_reserved)
         out = h + ffn_out
-
         if use_cache or past_key_value is not None:
             return out, new_kv
         return out
@@ -256,9 +221,8 @@ class TinyThinkerMoE(nn.Module):
         freqs_cis = self.freqs_cis[past_len:past_len + seqlen]
         mask = None
         if seqlen > 1 and past_key_values is None:
-            mask = torch.zeros(seqlen, seqlen, device=tokens.device)
-            bool_mask = torch.tril(torch.ones(seqlen, seqlen, device=tokens.device, dtype=torch.bool), diagonal=0).logical_not()
-            mask = mask.masked_fill(bool_mask, float('-inf'))
+            mask = torch.full((seqlen, seqlen), float("-inf"), device=tokens.device, dtype=h.dtype)
+            mask = torch.triu(mask, diagonal=1).view(1, 1, seqlen, seqlen)
         past_key_values_out = []
         for i, layer in enumerate(self.layers):
             past_kv = past_key_values[i] if past_key_values else None

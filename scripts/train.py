@@ -44,6 +44,8 @@ def parse_args():
     parser.add_argument('--grad_accum_steps', type=int, default=DEFAULT_GRAD_ACCUM, help='Pasos de acumulación de gradientes.')
     parser.add_argument('--lr', type=float, default=DEFAULT_LR, help='Learning rate máximo.')
     parser.add_argument('--use_gradient_checkpointing', action='store_true', help='Activar ahorro de RAM.')
+    parser.add_argument('--data_path', type=str, default=DEFAULT_DATA_PATH, help='Ruta al dataset (.bin).')
+    parser.add_argument('--tokenizer_path', type=str, default='model/tokenizer.json', help='Ruta al tokenizador (.json).')
     return parser.parse_args()
 
 def load_config(args):
@@ -241,17 +243,31 @@ def main():
     global_start_time = time.time()
     def t_print(msg):
         elapsed = time.time() - global_start_time
-        elapsed_str = time.strftime("%H:%M:%S", time.gmtime(elapsed))
+        days = int(elapsed // 86400)
+        hours = int((elapsed % 86400) // 3600)
+        minutes = int((elapsed % 3600) // 60)
+        seconds = int(elapsed % 60)
+        
+        if days > 0:
+            elapsed_str = f"{days:02d}:{hours:02d}:{minutes:02d}:{seconds:02d}"
+        else:
+            elapsed_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            
         full_msg = f"[{elapsed_str}] {msg}"
         print(full_msg)
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(full_msg + "\n")
 
     total_params = sum(p.numel() for p in model.parameters())
+    model_file = f"model/model_{arch}.py" if arch != 'dense' else "model/model.py"
     header = f"""========================================
 DATE: {start_date.strftime('%Y-%m-%d %H:%M:%S')}
 DEVICE: {str(device).upper()}
 CPU THREADS: {torch.get_num_threads()}
+--------------- FILES -----------------
+model_file: {model_file}
+tokenizer:  {args_cli.tokenizer_path}
+dataset:    {args_cli.data_path}
 --------------- HYPERPARAMS -----------
 batch_size: {args_cli.batch_size}
 seq_len: {args_cli.seq_len}
@@ -319,7 +335,7 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
             optimizer.step()
 
         # Logging de velocidad
-        if iter_num % 10 == 0:
+        if iter_num % 10 == 0 or iter_num < 10:
             t1 = time.time()
             dt = t1 - t0
             t0 = t1

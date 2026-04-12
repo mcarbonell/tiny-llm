@@ -24,10 +24,10 @@ class ModelArgs:
     # COGA Scratchpad Args (Phase 2)
     n_scratch_slots: int = 32   
     # COGA Recurrence Args (Phase 4)
-    n_pre_layers: int = 2       # Capas de parsing superficial
-    n_core_layers: int = 4      # Capas recurrentes (razonamiento)
-    n_post_layers: int = 2      # Capas de salida
-    max_recurrence_steps: int = 4 # Número máximo de veces que se repite el core
+    n_pre_layers: int = 2       
+    n_core_layers: int = 4      
+    n_post_layers: int = 2      
+    max_recurrence_steps: int = 4 
     # LoRA
     lora_r: int = 0             
     lora_alpha: float = 16.0     
@@ -79,7 +79,6 @@ class Expert(nn.Module):
         if ffn_dim_multiplier is not None:
             hidden_dim = int(ffn_dim_multiplier * hidden_dim)
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
-
         self.w1 = nn.Linear(dim, hidden_dim, bias=False)
         self.w2 = nn.Linear(hidden_dim, dim, bias=False)
         self.w3 = nn.Linear(dim, hidden_dim, bias=False)
@@ -94,39 +93,29 @@ class MoEFeedForward(nn.Module):
         self.n_experts = args.n_experts
         self.top_k = args.top_k
         self.n_reserved = args.n_reserved
-        
         self.gate = nn.Linear(args.dim, args.n_experts, bias=False)
         self.experts = nn.ModuleList([
-            Expert(
-                dim=args.dim,
-                hidden_dim=4 * args.dim,
-                multiple_of=args.multiple_of,
-                ffn_dim_multiplier=args.ffn_dim_multiplier
-            ) for _ in range(args.n_experts)
+            Expert(dim=args.dim, hidden_dim=4 * args.dim, multiple_of=args.multiple_of, ffn_dim_multiplier=args.ffn_dim_multiplier)
+            for _ in range(args.n_experts)
         ])
 
     def forward(self, x: torch.Tensor, train_reserved: bool = False):
         batch_size, seq_len, dim = x.shape
         x_flat = x.view(-1, dim)
-        
         gate_logits = self.gate(x_flat)
-        
         if not train_reserved and self.n_reserved > 0:
             mask = torch.zeros_like(gate_logits)
             mask[:, -self.n_reserved:] = float('-inf')
             gate_logits = gate_logits + mask
-            
         weights = F.softmax(gate_logits, dim=-1)
         top_weights, top_indices = torch.topk(weights, self.top_k, dim=-1)
         top_weights = top_weights / top_weights.sum(dim=-1, keepdim=True)
-        
         out = torch.zeros_like(x_flat)
         for i in range(self.n_experts):
             token_indices, k_indices = (top_indices == i).nonzero(as_tuple=True)
             if token_indices.numel() > 0:
                 expert_out = self.experts[i](x_flat[token_indices])
                 out[token_indices] += top_weights[token_indices, k_indices].unsqueeze(-1) * expert_out
-                
         return out.view(batch_size, seq_len, dim)
 
 class Attention(nn.Module):
@@ -138,7 +127,6 @@ class Attention(nn.Module):
         self.n_local_kv_heads = self.n_kv_heads
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
         self.head_dim = args.dim // args.n_heads
-
         self.wq = nn.Linear(args.dim, args.n_heads * self.head_dim, bias=False)
         self.wk = nn.Linear(args.dim, self.n_kv_heads * self.head_dim, bias=False)
         self.wv = nn.Linear(args.dim, self.n_kv_heads * self.head_dim, bias=False)
@@ -147,46 +135,29 @@ class Attention(nn.Module):
     def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: torch.Tensor, past_key_value=None):
         bsz, seqlen, _ = x.shape
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
-        
         xq = xq.view(bsz, seqlen, self.n_local_heads, self.head_dim)
         xk = xk.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
         xv = xv.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
-        
         xq, xk = apply_rotary_emb(xq, xk, freqs=freqs_cis)
-        
         if self.n_rep > 1:
             xk = xk[:, :, :, None, :].expand(bsz, seqlen, self.n_local_kv_heads, self.n_rep, self.head_dim).flatten(2, 3)
             xv = xv[:, :, :, None, :].expand(bsz, seqlen, self.n_local_kv_heads, self.n_rep, self.head_dim).flatten(2, 3)
-            
-        xq = xq.transpose(1, 2)
-        xk = xk.transpose(1, 2)
-        xv = xv.transpose(1, 2)
-        
+        xq, xk, xv = xq.transpose(1, 2), xk.transpose(1, 2), xv.transpose(1, 2)
         if past_key_value is not None:
             past_key, past_value = past_key_value
             xk = torch.cat([past_key, xk], dim=2)
             xv = torch.cat([past_value, xv], dim=2)
             
-        scores = torch.matmul(xq, xk.transpose(2, 3)) / math.sqrt(self.head_dim)
-        if mask is not None:
-            scores = scores + mask
-        scores = F.softmax(scores.float(), dim=-1).type_as(xq)
-        output = torch.matmul(scores, xv)
+        # OPTIMIZACIÓN: Scaled Dot Product Attention
+        output = F.scaled_dot_product_attention(xq, xk, xv, attn_mask=mask, dropout_p=0.0, is_causal=False)
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
         return self.wo(output), (xk, xv)
 
 class CrossAttention(nn.Module):
-    """
-    [COGA Phase 2] Cross-Attention mechanism para leer del Scratchpad.
-    - Queries: Secuencia de entrada principal.
-    - Keys/Values: Scratchpad tensor.
-    No requiere máscara causal porque el scratchpad es global y atemporal.
-    """
     def __init__(self, args: ModelArgs):
         super().__init__()
         self.n_heads = args.n_heads
         self.head_dim = args.dim // args.n_heads
-
         self.wq = nn.Linear(args.dim, args.n_heads * self.head_dim, bias=False)
         self.wk = nn.Linear(args.dim, args.n_heads * self.head_dim, bias=False)
         self.wv = nn.Linear(args.dim, args.n_heads * self.head_dim, bias=False)
@@ -195,20 +166,12 @@ class CrossAttention(nn.Module):
     def forward(self, query: torch.Tensor, scratchpad: torch.Tensor):
         bsz, seqlen, _ = query.shape
         _, slots, _ = scratchpad.shape
+        xq = self.wq(query).view(bsz, seqlen, self.n_heads, self.head_dim).transpose(1, 2)
+        xk = self.wk(scratchpad).view(bsz, slots, self.n_heads, self.head_dim).transpose(1, 2)
+        xv = self.wv(scratchpad).view(bsz, slots, self.n_heads, self.head_dim).transpose(1, 2)
         
-        xq = self.wq(query).view(bsz, seqlen, self.n_heads, self.head_dim)
-        xk = self.wk(scratchpad).view(bsz, slots, self.n_heads, self.head_dim)
-        xv = self.wv(scratchpad).view(bsz, slots, self.n_heads, self.head_dim)
-        
-        xq = xq.transpose(1, 2)
-        xk = xk.transpose(1, 2)
-        xv = xv.transpose(1, 2)
-        
-        scores = torch.matmul(xq, xk.transpose(2, 3)) / math.sqrt(self.head_dim)
-        # No causal mask needed for scratchpad reading
-        scores = F.softmax(scores.float(), dim=-1).type_as(xq)
-        
-        output = torch.matmul(scores, xv)
+        # OPTIMIZACIÓN: Scaled Dot Product Attention (Sin máscara causal para el scratchpad)
+        output = F.scaled_dot_product_attention(xq, xk, xv, attn_mask=None, dropout_p=0.0, is_causal=False)
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
         return self.wo(output)
 
@@ -216,26 +179,19 @@ class TransformerBlock(nn.Module):
     def __init__(self, args: ModelArgs):
         super().__init__()
         self.attention = Attention(args)
-        self.cross_attention = CrossAttention(args) # [COGA] Capa de lectura de Scratchpad
+        self.cross_attention = CrossAttention(args)
         self.feed_forward = MoEFeedForward(args)
-        
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.cross_attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
 
     def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: torch.Tensor, scratchpad: torch.Tensor, past_key_value=None, use_cache: bool = False, train_reserved: bool = False):
-        # 1. Causal Self-Attention (Pensamiento Lineal)
         attn_out, new_kv = self.attention(self.attention_norm(x), freqs_cis, mask, past_key_value)
         h = x + attn_out
-        
-        # 2. [COGA] Bidirectional Cross-Attention to Scratchpad (Recuperación de Memoria de Trabajo)
         cross_out = self.cross_attention(self.cross_attention_norm(h), scratchpad)
         h = h + cross_out
-        
-        # 3. MoE FeedForward (Razonamiento de Expertos)
         ffn_out = self.feed_forward(self.ffn_norm(h), train_reserved=train_reserved)
         out = h + ffn_out
-
         if use_cache or past_key_value is not None:
             return out, new_kv
         return out
@@ -247,47 +203,32 @@ class TinyThinkerCOGA(nn.Module):
         self.vocab_size = args.vocab_size
         self.dim = args.dim
         self.n_scratch_slots = args.n_scratch_slots
-        
         self.tok_embeddings = nn.Embedding(args.vocab_size, args.dim)
-        
-        # [COGA Phase 4] División Funcional (Pre, Core, Post)
         self.pre_layers = nn.ModuleList([TransformerBlock(args) for _ in range(args.n_pre_layers)])
         self.core_layers = nn.ModuleList([TransformerBlock(args) for _ in range(args.n_core_layers)])
         self.post_layers = nn.ModuleList([TransformerBlock(args) for _ in range(args.n_post_layers)])
-        
-        # [COGA Phase 4] Halt Head: Estima la dificultad del razonamiento (0 a 1)
         self.halt_head = nn.Linear(args.dim, 1)
-        
         self.norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.output = nn.Linear(args.dim, args.vocab_size, bias=False)
         self.tok_embeddings.weight = self.output.weight
-        
         freqs_cis = precompute_freqs_cis(self.args.dim // self.args.n_heads, self.args.max_seq_len * 2)
         self.register_buffer("freqs_cis", freqs_cis, persistent=False)
 
     def forward(self, tokens: torch.Tensor, scratchpad: Optional[torch.Tensor] = None, past_key_values=None, use_cache=False, train_reserved=False):
         bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
-        
         if scratchpad is None:
             scratchpad = torch.zeros(bsz, self.n_scratch_slots, self.dim, device=tokens.device, dtype=h.dtype)
-            
         past_len = 0
         if past_key_values:
-            # En COGA Phase 4, past_key_values tiene la longitud: pre + core + post
             past_len = past_key_values[0][0].shape[2]
         freqs_cis = self.freqs_cis[past_len:past_len + seqlen]
-        
         mask = None
         if seqlen > 1 and past_key_values is None:
-            mask = torch.zeros(seqlen, seqlen, device=tokens.device)
-            bool_mask = torch.tril(torch.ones(seqlen, seqlen, device=tokens.device, dtype=torch.bool), diagonal=0).logical_not()
-            mask = mask.masked_fill(bool_mask, float('-inf'))
-            
+            mask = torch.full((seqlen, seqlen), float("-inf"), device=tokens.device, dtype=h.dtype)
+            mask = torch.triu(mask, diagonal=1).view(1, 1, seqlen, seqlen)
         past_key_values_out = []
         layer_idx = 0
-        
-        # 1. PRE-LAYERS (Parsing Superficial)
         for layer in self.pre_layers:
             past_kv = past_key_values[layer_idx] if past_key_values else None
             layer_out = layer(h, freqs_cis, mask, scratchpad, past_kv, use_cache=use_cache, train_reserved=train_reserved)
@@ -297,31 +238,19 @@ class TinyThinkerCOGA(nn.Module):
             else:
                 h = layer_out
             layer_idx += 1
-            
-        # 2. BUDGET ESTIMATION (Halt Head)
-        # Tomamos la representación actual del último token para decidir el presupuesto
-        halt_logits = self.halt_head(h[:, -1:, :]) # (bsz, 1, 1)
-        halt_prob = torch.sigmoid(halt_logits).squeeze(-1) # (bsz, 1)
-        
-        # En inferencia (bsz=1) calculamos el budget. En pre-entrenamiento forzamos iteraciones.
+        halt_logits = self.halt_head(h[:, -1:, :])
+        halt_prob = torch.sigmoid(halt_logits).squeeze(-1)
         steps_to_run = self.args.max_recurrence_steps
         if not self.training and bsz == 1:
-            # Estrategia de paro adaptativo: a menor halt_prob, más pasos.
-            # Convertimos la prob (0 a 1) en pasos (1 a max_recurrence_steps)
             estimated_steps = max(1, round((1.0 - halt_prob.item()) * self.args.max_recurrence_steps))
             steps_to_run = estimated_steps
-            
-        # 3. CORE-LAYERS (Universal Transformer / Bucle Recurrente)
         for step in range(steps_to_run):
             core_layer_idx_start = layer_idx
             for layer in self.core_layers:
-                # Solo guardamos el KV-cache de la ÚLTIMA iteración para no inflar la memoria
                 is_last_step = (step == steps_to_run - 1)
                 use_cache_here = use_cache and is_last_step
-                
                 past_kv = past_key_values[core_layer_idx_start] if past_key_values else None
                 layer_out = layer(h, freqs_cis, mask, scratchpad, past_kv, use_cache=use_cache_here, train_reserved=train_reserved)
-                
                 if isinstance(layer_out, tuple):
                     h, past_kv_out = layer_out
                     if is_last_step:
@@ -329,10 +258,7 @@ class TinyThinkerCOGA(nn.Module):
                 else:
                     h = layer_out
                 core_layer_idx_start += 1
-                
         layer_idx += self.args.n_core_layers
-        
-        # 4. POST-LAYERS (Output)
         for layer in self.post_layers:
             past_kv = past_key_values[layer_idx] if past_key_values else None
             layer_out = layer(h, freqs_cis, mask, scratchpad, past_kv, use_cache=use_cache, train_reserved=train_reserved)
@@ -342,10 +268,8 @@ class TinyThinkerCOGA(nn.Module):
             else:
                 h = layer_out
             layer_idx += 1
-                
         h = self.norm(h)
         logits = self.output(h)
-        
         if use_cache:
             return logits, past_key_values_out
         return logits

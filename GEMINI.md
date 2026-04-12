@@ -21,9 +21,12 @@ Toda nueva tarea o fase debe seguir estrictamente este flujo:
 *   **Timestamp Relativo:** Las líneas de log deben usar el formato `[HH:MM:SS]` indicando el tiempo transcurrido desde el inicio.
 *   **Header de Metadatos:** Toda ejecución debe imprimir un bloque con el hardware usado, hilos de CPU y todos los hiperparámetros.
 *   **Sin Emojis:** Prohibidos para garantizar compatibilidad con terminales Windows.
-*   **Trazabilidad de Ficheros Base:** En cada entrenamiento o finetune, se debe registrar:
-    *   Nombre del fichero base utilizado (ej. `finetune_base: corpus_llamaware_v3.json`)
-    *   Checksum/hash del fichero base (SHA256 o MD5) para evitar colisiones de nombres.
+*   **Trazabilidad de Ficheros Base:** En cada entrenamiento o finetune, se debe registrar obligatoriamente en el header del log:
+    *   Fichero del modelo utilizado (ej. `model/model.py`).
+    *   Fichero del tokenizador con su versión (ej. `model/tokenizer_v1.json`).
+    *   Ruta completa del dataset de entrenamiento (ej. `data/train_v1.bin`).
+    *   Checksum/hash del dataset (opcional pero recomendado).
+*   **Versionado de Tokenizadores:** NUNCA se debe sobrescribir `tokenizer.json`. Cada nuevo tokenizador debe llevar un sufijo de versión (ej. `tokenizer_v2.json`). Los modelos entrenados con una versión específica deben mantener esa referencia en sus metadatos.
 *   **Trazabilidad de Guardados:** Cada vez que se guarda un activo (checkpoint, modelo mejorado, dataset procesado), se debe registrar la ruta completa del fichero guardado (ej. `saved: checkpoints/ckpt_305M_v2.pt`).
 
 ## 4. Restricciones de Ejecución
