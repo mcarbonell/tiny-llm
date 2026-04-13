@@ -12,6 +12,9 @@ image = (
         "PyYAML>=6.0.2",
         "tqdm>=4.66.0"
     )
+    .add_local_dir("model", remote_path="/root/model")
+    .add_local_dir("scripts", remote_path="/root/scripts")
+    .add_local_dir("configs", remote_path="/root/configs")
 )
 
 app = modal.App("tinythinker-remote")
@@ -26,12 +29,6 @@ volume = modal.Volume.from_name("tinythinker-storage", create_if_missing=True)
     gpu="l4",               # Nvidia L4 (24GB VRAM) - Balance ideal rendimiento/coste
     volumes={"/vol": volume},
     timeout=3600 * 4,       # Timeout de 4 horas
-    mounts=[
-        # Montamos las carpetas locales necesarias en el contenedor remoto
-        modal.Mount.from_local_dir("model", remote_path="/root/model"),
-        modal.Mount.from_local_dir("scripts", remote_path="/root/scripts"),
-        modal.Mount.from_local_dir("configs", remote_path="/root/configs"),
-    ]
 )
 def train(config_path="/root/configs/train_v1_high_density.yaml"):
     # Aseguramos que el código en /root sea importable
@@ -58,7 +55,7 @@ def train(config_path="/root/configs/train_v1_high_density.yaml"):
         print(f"✅ Dataset encontrado en volumen: {DATA_VOL_PATH}")
         if os.path.exists(LOCAL_DATA_FILE):
              os.remove(LOCAL_DATA_FILE)
-        os.link(DATA_VOL_PATH, LOCAL_DATA_FILE)
+        os.symlink(DATA_VOL_PATH, LOCAL_DATA_FILE)
     else:
         print(f"❌ ERROR: No se encontró el dataset en {DATA_VOL_PATH}")
         print("Sube el archivo primero con: modal volume put tinythinker-storage data/train_v1.bin data/train_v1.bin")
@@ -98,5 +95,5 @@ def train(config_path="/root/configs/train_v1_high_density.yaml"):
             volume.commit()
 
 @app.local_entrypoint()
-def main():
-    train.remote()
+def main(config_path: str = "/root/configs/train_v1_high_density.yaml"):
+    train.remote(config_path)

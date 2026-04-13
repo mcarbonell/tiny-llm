@@ -54,9 +54,13 @@ def load_config(args):
         with open(args.config, 'r') as f:
             config = yaml.safe_load(f)
     
+    # Extraer argumentos pasados explícitamente por CLI para que tengan prioridad sobre YAML
+    cli_args = [arg.lstrip('-').split('=')[0].replace('-', '_') for arg in sys.argv if arg.startswith('-')]
+    
     # Fusionar yaml en args
     for k, v in config.items():
-        setattr(args, k, v)
+        if k not in cli_args:
+            setattr(args, k, v)
         
     return args
 
