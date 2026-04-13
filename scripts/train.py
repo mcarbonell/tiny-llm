@@ -128,22 +128,24 @@ def main():
     # Setup de Precisión Mixta (AMP)
     _is_dml = str(device).startswith('dml') or 'privateuseone' in str(device)
     if _is_dml:
-        # DirectML suele ser inestable con FP16/BF16 en iGPUs AMD integradas
-        # Forzamos Float32 para máxima estabilidad y evitar NaNs
-        ctx = contextlib.nullcontext()
+        # DirectML todavía falla con varias ops básicas bajo autocast
+        # (pow, to, mul, linear). Priorizamos compatibilidad.
         ptdtype = torch.float32
-        print("[Hardware] Forzando Float32 para estabilidad en DirectML")
+        ctx = contextlib.nullcontext()
+        scaler = torch.amp.GradScaler('cpu', enabled=False)
+        print("[Hardware] DirectML detectado: AMP/FP16 desactivado por compatibilidad")
     elif device == 'cuda':
         ptdtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
         ctx = torch.amp.autocast(device_type='cuda', dtype=ptdtype)
+        scaler = torch.amp.GradScaler('cuda', enabled=(ptdtype == torch.float16))
     elif device == 'cpu':
         ptdtype = torch.bfloat16  # AVX-512 nativo en Zen 4
         ctx = torch.amp.autocast(device_type='cpu', dtype=ptdtype)
+        scaler = torch.amp.GradScaler('cpu', enabled=False)
     else:
         ctx = contextlib.nullcontext()
         ptdtype = torch.float32
-
-    scaler = torch.amp.GradScaler('cuda', enabled=(ptdtype == torch.float16 and device == 'cuda'))
+        scaler = torch.amp.GradScaler('cpu', enabled=False)
 
     # ----------------------------------
     # 2. Carga de Datos (Memmap)

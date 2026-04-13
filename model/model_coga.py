@@ -40,7 +40,16 @@ class RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(dim))
 
     def forward(self, x):
-        variance = x.pow(2).mean(-1, keepdim=True)
+        # DirectML autocast no implementa aten::pow.Tensor_Scalar; desactivamos
+        # autocast localmente y usamos multiplicacion equivalente para RMSNorm.
+        if x.device.type == 'privateuseone':
+            with torch.autocast('privateuseone', enabled=False):
+                x_float = x.float()
+                variance = (x_float * x_float).mean(-1, keepdim=True)
+                normed = x_float * torch.rsqrt(variance + self.eps)
+                return normed * self.weight
+
+        variance = (x * x).mean(-1, keepdim=True)
         return x * torch.rsqrt(variance + self.eps) * self.weight
 
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
@@ -216,18 +225,38 @@ class TinyThinkerCOGA(nn.Module):
 
     def forward(self, tokens: torch.Tensor, scratchpad: Optional[torch.Tensor] = None, past_key_values=None, use_cache=False, train_reserved=False):
         bsz, seqlen = tokens.shape
-        h = self.tok_embeddings(tokens)
-        if scratchpad is None:
-            scratchpad = torch.zeros(bsz, self.n_scratch_slots, self.dim, device=tokens.device, dtype=h.dtype)
-        past_len = 0
-        if past_key_values:
-            past_len = past_key_values[0][0].shape[2]
-        freqs_cis = self.freqs_cis[past_len:past_len + seqlen]
-        mask = None
-        if seqlen > 1 and past_key_values is None:
-            mask = torch.zeros(seqlen, seqlen, device=tokens.device, dtype=h.dtype)
-            bool_mask = torch.ones(seqlen, seqlen, device=tokens.device, dtype=torch.bool).tril(diagonal=0).logical_not()
-            mask = mask.masked_fill(bool_mask, float("-inf")).view(1, 1, seqlen, seqlen)
+        
+        # Workaround: DirectML autocast no soporta aten::embedding, aten::copy_, ni aten::zero_
+        if tokens.device.type == 'privateuseone':
+            with torch.autocast('privateuseone', enabled=False):
+                h = self.tok_embeddings(tokens)
+                device_freqs_cis = self.freqs_cis.to(h.device)
+                if scratchpad is None:
+                    scratchpad = torch.zeros(bsz, self.n_scratch_slots, self.dim, device=tokens.device, dtype=h.dtype)
+                past_len = 0
+                if past_key_values:
+                    past_len = past_key_values[0][0].shape[2]
+                freqs_cis = device_freqs_cis[past_len:past_len + seqlen]
+                mask = None
+                if seqlen > 1 and past_key_values is None:
+                    mask = torch.zeros(seqlen, seqlen, device=tokens.device, dtype=h.dtype)
+                    bool_mask = torch.ones(seqlen, seqlen, device=tokens.device, dtype=torch.bool).tril(diagonal=0).logical_not()
+                    mask = mask.masked_fill(bool_mask, float("-inf")).view(1, 1, seqlen, seqlen)
+        else:
+            h = self.tok_embeddings(tokens)
+            device_freqs_cis = self.freqs_cis.to(h.device)
+            if scratchpad is None:
+                scratchpad = torch.zeros(bsz, self.n_scratch_slots, self.dim, device=tokens.device, dtype=h.dtype)
+            past_len = 0
+            if past_key_values:
+                past_len = past_key_values[0][0].shape[2]
+            freqs_cis = device_freqs_cis[past_len:past_len + seqlen]
+            mask = None
+            if seqlen > 1 and past_key_values is None:
+                mask = torch.zeros(seqlen, seqlen, device=tokens.device, dtype=h.dtype)
+                bool_mask = torch.ones(seqlen, seqlen, device=tokens.device, dtype=torch.bool).tril(diagonal=0).logical_not()
+                mask = mask.masked_fill(bool_mask, float("-inf")).view(1, 1, seqlen, seqlen)
+                
         past_key_values_out = []
         layer_idx = 0
         for layer in self.pre_layers:
