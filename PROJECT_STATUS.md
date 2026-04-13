@@ -21,6 +21,14 @@ Se ha abandonado el uso de Wikipedia cruda a favor de un corpus de "Alta Densida
 - **Nuevo Objetivo:** Entrenar TinyThinker 78M desde cero usando el Dataset V1.
 - **Scaling Law Warning:** Identificado que 108M tokens es insuficiente para 78M parámetros (Ratio 1.38:1). Este entrenamiento servirá como "Warmup" y validación de pipeline. El objetivo V2 será alcanzar 2B+ tokens.
 
+### 4. Resultados del Sweep y Validación de Scaling Laws
+Se han realizado barridos y entrenamientos completos de 5000 iteraciones para modelos más pequeños en la GPU L4 de Modal, demostrando empíricamente las *Scaling Laws*:
+- **Nano (10M):** Perplejidad **244.95** (Ratio Tokens/Params = 10.3:1) - LR Óptimo: 1e-3, Warmup: 1000.
+- **Micro (20M):** Perplejidad **158.70** (Ratio Tokens/Params = 5.4:1) - Gran salto de rendimiento.
+- **Mini (30M):** Perplejidad **152.97** (Ratio Tokens/Params = 3.6:1) - Rendimiento marginal sobre el 20M debido al estrangulamiento de datos (data starvation).
+
+Estas métricas validan la urgencia de expandir el dataset para la V2. El modelo de 78M (Ratio 1.38:1) se va a preentrenar fuertemente sub-alimentado de datos para validar la estabilidad arquitectónica final a gran escala.
+
 ## Próximos Pasos 🏁
 1. **Lanzar Entrenamiento V1:** Validar que el modelo genera inglés coherente y respeta los tags `<think>`.
 2. **Expandir Dataset a V2:** Aumentar el volumen de FineWeb-Edu y Cosmopedia para alcanzar el ratio de Chinchilla (1.5B tokens).
