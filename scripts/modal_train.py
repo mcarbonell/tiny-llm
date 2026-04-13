@@ -23,7 +23,7 @@ volume = modal.Volume.from_name("tinythinker-storage", create_if_missing=True)
 # 3. Función de entrenamiento remoto
 @app.function(
     image=image,
-    gpu="a10g",             # Nvidia A10G (24GB VRAM) - Balance ideal rendimiento/coste
+    gpu="l4",               # Nvidia L4 (24GB VRAM) - Balance ideal rendimiento/coste
     volumes={"/vol": volume},
     timeout=3600 * 4,       # Timeout de 4 horas
     mounts=[
@@ -33,7 +33,7 @@ volume = modal.Volume.from_name("tinythinker-storage", create_if_missing=True)
         modal.Mount.from_local_dir("configs", remote_path="/root/configs"),
     ]
 )
-def train():
+def train(config_path="/root/configs/train_v1_high_density.yaml"):
     # Aseguramos que el código en /root sea importable
     sys.path.append("/root")
     
@@ -44,9 +44,9 @@ def train():
 
     # Definimos las rutas dentro del contenedor de Modal
     # /vol es el volumen persistente, /root es el código montado
-    DATA_VOL_PATH = "/vol/data/train_combined.bin"
+    DATA_VOL_PATH = "/vol/data/train_v1.bin"
     LOCAL_DATA_DIR = "/root/data"
-    LOCAL_DATA_FILE = os.path.join(LOCAL_DATA_DIR, "train_combined.bin")
+    LOCAL_DATA_FILE = os.path.join(LOCAL_DATA_DIR, "train_v1.bin")
     
     # Preparamos el entorno para que train.py encuentre lo que espera
     os.makedirs(LOCAL_DATA_DIR, exist_ok=True)
@@ -61,17 +61,14 @@ def train():
         os.link(DATA_VOL_PATH, LOCAL_DATA_FILE)
     else:
         print(f"❌ ERROR: No se encontró el dataset en {DATA_VOL_PATH}")
-        print("Sube el archivo primero con: modal volume put tinythinker-storage data/train_combined.bin data/train_combined.bin")
+        print("Sube el archivo primero con: modal volume put tinythinker-storage data/train_v1.bin data/train_v1.bin")
         return
 
     # Inyeccion de argumentos para train.py
-    # Usamos batch_size 32 porque la A10G tiene memoria de sobra para este modelo
     test_args = [
         "scripts/train.py",
+        "--config", config_path,
         "--device", "cuda",
-        "--batch_size", "32",
-        "--seq_len", "1024",
-        "--max_iters", "2000"
     ]
 
     print("--- INICIANDO ENTRENAMIENTO REMOTO ---")

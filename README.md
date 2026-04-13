@@ -47,14 +47,14 @@ Hemos implementado un sistema de aprendizaje graduado inspirado en el desarrollo
 # 1. Instalar dependencias
 pip install -r requirements.txt
 
-# 2. Descargar TinyStories y entrenar tokenizador BPE
-python scripts/download_and_tokenize.py
+# 2. Construir tokenizador BPE
+python scripts/build_tokenizer_v1.py
 
-# 3. Tokenizar y guardar el dataset en binario
-python scripts/prepare_data.py
+# 3. Preparar dataset V1 en binario
+python scripts/prepare_v1_corpus.py
 
 # 4. Arrancar el pre-entrenamiento
-python scripts/train.py
+python scripts/train.py --config configs/train_v1_high_density.yaml
 
 # 5. Fine-tuning con LoRA
 python scripts/finetune.py --lora_r 8 --lora_alpha 16 --data_file data/tool_dataset_real.json

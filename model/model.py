@@ -155,12 +155,20 @@ class Attention(nn.Module):
             xv = torch.cat([past_value, xv], dim=2)
 
         # OPTIMIZACIÓN: Scaled Dot Product Attention (Flash Attention si disponible)
-        output = F.scaled_dot_product_attention(
-            xq, xk, xv, 
-            attn_mask=mask, 
-            dropout_p=0.0, 
-            is_causal=False 
-        )
+        if past_key_value is None and seqlen > 1:
+            output = F.scaled_dot_product_attention(
+                xq, xk, xv, 
+                attn_mask=None, 
+                dropout_p=0.0, 
+                is_causal=True 
+            )
+        else:
+            output = F.scaled_dot_product_attention(
+                xq, xk, xv, 
+                attn_mask=mask, 
+                dropout_p=0.0, 
+                is_causal=False 
+            )
         
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
         return self.wo(output), (xk, xv)

@@ -47,7 +47,7 @@ def validate_dataset(data: object, path: str) -> list:
 
 def load_model_and_tokenizer(checkpoint_path, device='cpu'):
     """Carga el modelo y tokenizador."""
-    tokenizer = Tokenizer.from_file(os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer.json"))
+    tokenizer = Tokenizer.from_file(os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer_v1.json"))
 
     # Cargar checkpoint completo (desactivar weights_only por compatibilidad)
     checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)

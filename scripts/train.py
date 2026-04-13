@@ -225,11 +225,12 @@ def main():
             for layer in model.layers: layer.use_checkpoint = True
 
     # En DirectML, foreach=True (por defecto) causa fallback a CPU y NaNs.
+    weight_decay = getattr(args_cli, 'weight_decay', 0.1)
     if _is_dml:
         print("[Optimizador] Usando DMLAdamW personalizado sin 'lerp_' para máxima compatibilidad con AMD")
-        optimizer = DMLAdamW(model.parameters(), lr=args_cli.lr, weight_decay=1e-1)
+        optimizer = DMLAdamW(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay)
     else:
-        optimizer = torch.optim.AdamW(model.parameters(), lr=args_cli.lr, weight_decay=1e-1, foreach=False)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay, foreach=False)
     
     iter_num = 0
     best_val_loss = 1e9

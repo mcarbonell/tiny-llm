@@ -14,10 +14,10 @@ Se ha abandonado el uso de Wikipedia cruda a favor de un corpus de "Alta Densida
 - **FineWeb-Edu (40%):** Filtrado por LLMs para máximo valor educativo.
 - **Cosmopedia v2 (30%):** Conocimiento sintético estructurado perfecto.
 - **TinyStories v2 (15%):** Narrativa simple con tags `<|endoftext|>` limpios.
-- **Sintético Lógica (15%):** Currículum de razonamiento niveles 0-4.
+- **Sintético Lógica (10%) + Sintético Plan (5%):** Currículum de razonamiento niveles 0-4 y planificación.
 
 ### 3. Estado del Modelo (78M params)
-- **Status:** El modelo anterior fue descartado por desincronización de vocabulario.
+- **Status:** Entrenando. Entrenamiento V1 del modelo 78M activo localmente (ver log más reciente en `logs/`).
 - **Nuevo Objetivo:** Entrenar TinyThinker 78M desde cero usando el Dataset V1.
 - **Scaling Law Warning:** Identificado que 108M tokens es insuficiente para 78M parámetros (Ratio 1.38:1). Este entrenamiento servirá como "Warmup" y validación de pipeline. El objetivo V2 será alcanzar 2B+ tokens.
 

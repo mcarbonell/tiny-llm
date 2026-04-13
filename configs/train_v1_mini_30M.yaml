@@ -1,0 +1,26 @@
+# TinyThinker 30M (Mini)
+dim: 320
+n_layers: 10
+n_heads: 8
+n_kv_heads: 4
+vocab_size: 16384
+max_seq_len: 512
+
+batch_size: 8
+seq_len: 512
+max_iters: 5000
+learning_rate: 0.0002
+min_lr: 0.00001
+warmup_iters: 500
+eval_interval: 250
+eval_iters: 20
+weight_decay: 0.1
+grad_clip: 1.0
+grad_accum_steps: 4
+use_gradient_checkpointing: false
+
+data_path: data/train_v1.bin
+tokenizer_path: model/tokenizer_v1.json
+checkpoint_dir: checkpoints
+arch: dense
+device: dml
