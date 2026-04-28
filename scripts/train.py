@@ -15,6 +15,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from model.model import TinyThinker, ModelArgs as DenseArgs
 from model.model_moe import TinyThinkerMoE, ModelArgs as MoEArgs
 from model.model_coga import TinyThinkerCOGA, ModelArgs as CogaArgs
+from model.model_spectral import SpectralThinker, SpectralArgs
 
 # ----------------------------------
 # Configuración por Defecto
@@ -35,7 +36,7 @@ import yaml
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyThinker Pretrain — Versión Optimizada")
     parser.add_argument('--config', type=str, default=None, help='Ruta al config YAML. Sobreescribe otros argumentos.')
-    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga'], help='Arquitectura a entrenar.')
+    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral'], help='Arquitectura a entrenar.')
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'dml', 'mps'], help='Dispositivo de entrenamiento.')
     parser.add_argument('--resume', action='store_true', help='Reanudar desde el último checkpoint.')
     parser.add_argument('--max_iters', type=int, default=DEFAULT_MAX_ITERS, help='Número total de iteraciones.')
@@ -215,6 +216,13 @@ def main():
         coga_args['n_reserved'] = getattr(args_cli, 'n_reserved', 4)
         model_args = CogaArgs(**coga_args)
         model = TinyThinkerCOGA(model_args)
+    elif arch == 'spectral':
+        spectral_args = common_args.copy()
+        spectral_args['k_dim_attn']   = getattr(args_cli, 'k_dim_attn',   64)
+        spectral_args['k_dim_ffn']    = getattr(args_cli, 'k_dim_ffn',    64)
+        spectral_args['k_hidden_ffn'] = getattr(args_cli, 'k_hidden_ffn', 128)
+        model_args = SpectralArgs(**spectral_args)
+        model = SpectralThinker(model_args)
     else:
         raise ValueError(f"Arquitectura desconocida: {arch}")
         
@@ -250,7 +258,7 @@ def main():
         if os.path.exists(ckpt_path):
             print(f"[Resume] Cargando progreso desde {ckpt_path}...")
             # En PyTorch 2.6 we need to allowlist our custom classes
-            torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs])
+            torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs])
             checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
             model.load_state_dict(checkpoint['model'])
 
@@ -314,7 +322,7 @@ def main():
             f.write(full_msg + "\n")
 
     total_params = sum(p.numel() for p in model.parameters())
-    model_file = f"model/model_{arch}.py" if arch != 'dense' else "model/model.py"
+    model_file = f"model/model_{arch}.py" if arch != 'dense' else "model/model.py"  # spectral -> model/model_spectral.py
     header = f"""========================================
 DATE: {start_date.strftime('%Y-%m-%d %H:%M:%S')}
 DEVICE: {str(device).upper()}
