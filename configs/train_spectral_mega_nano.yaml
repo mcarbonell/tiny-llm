@@ -1,0 +1,41 @@
+# SpectralThinker Mega-Nano — dim=1024, k=64, 8 capas
+# Experimento: mismo nucleo k=64 con dim 4x mayor que Nano
+# Hipotesis: k=64 es suficiente para dim=1024 (256x compresion en proyecciones)
+# Equiv. denso estimado: ~180M params (proyecciones + embedding)
+
+experiment_name: "spectral_mega_nano"
+model_file: "model/model_spectral.py"
+
+# Tokenizer y datos
+tokenizer: "model/tokenizer_v1.json"
+data_path: "data/train_v1.bin"
+
+# Hiperparámetros de entrenamiento
+batch_size: 8
+seq_len: 256
+grad_accum_steps: 8         # effective batch = 8*256*8 = 16384 tokens/step (igual que Nano)
+max_iters: 3000             # run de validacion primero (extendible si converge bien)
+learning_rate: 0.0008       # ligeramente menor que Nano por modelo mas grande
+warmup_iters: 300
+eval_interval: 250
+save_interval: 250
+min_lr: 0.00001
+
+# Arquitectura espectral
+arch: "spectral"
+dim: 1024
+n_layers: 8
+n_heads: 8
+n_kv_heads: 4               # GQA: 4 kv heads, head_dim=128
+vocab_size: 16384
+multiple_of: 256
+ffn_dim_multiplier: 2.0
+
+# Nucleos espectrales — MISMO k que Nano
+k_dim_attn: 64              # 64/1024 = 6.25% frecuencias (vs 25% en Nano)
+k_dim_ffn: 64
+k_hidden_ffn: 128
+
+# Misc
+norm_eps: 0.000001
+max_seq_len: 512
