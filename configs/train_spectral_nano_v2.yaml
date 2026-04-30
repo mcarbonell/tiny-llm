@@ -1,0 +1,37 @@
+# SpectralThinker Nano v2 — Weight Tying correcto (EXP-3)
+# Identico al Nano v1 pero con model_spectral.py v3 (weight tying funcional)
+# Cambio efectivo: embedding pasa de 8.38M a 4.19M params (compartido con output)
+# Objetivo: ¿mejora la perplexity con weight tying correcto?
+
+experiment_name: "spectral_nano_v2"
+model_file: "model/model_spectral.py"
+
+tokenizer: "model/tokenizer_v1.json"
+data_path: "data/train_v1.bin"
+
+# Identicos al Nano v1
+batch_size: 16
+seq_len: 256
+grad_accum_steps: 4
+max_iters: 5000
+learning_rate: 0.001
+warmup_iters: 200
+eval_interval: 250
+save_interval: 250
+min_lr: 0.00001
+
+# Arquitectura identica
+dim: 256
+n_layers: 6
+n_heads: 8
+n_kv_heads: 4
+vocab_size: 16384
+multiple_of: 256
+ffn_dim_multiplier: 2.0
+norm_eps: 0.000001
+max_seq_len: 512
+
+# Nucleos espectrales identicos
+k_dim_attn: 64
+k_dim_ffn: 64
+k_hidden_ffn: 128
