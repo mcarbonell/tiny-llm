@@ -9,7 +9,14 @@ import datetime
 
 # Añadir ruta base
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from model.model import TinyThinker, ModelArgs
+from model.model import TinyThinker, ModelArgs as DenseArgs
+from model.model_moe import TinyThinkerMoE, ModelArgs as MoEArgs
+from model.model_coga import TinyThinkerCOGA, ModelArgs as CogaArgs
+from model.model_spectral import SpectralThinker, SpectralArgs
+from model.model_spectral_v4 import SpectralThinker as SpectralThinkerV4, SpectralArgs as SpectralArgsV4
+from model.model_spectral_v5 import SpectralThinker as SpectralThinkerV5, SpectralArgs as SpectralArgsV5
+from model.model_coga_spectral import TinyThinkerCogaSpectral, CogaSpectralArgs
+from model.model_analog import TinyThinkerAnalog, AnalogArgs
 
 
 def validate_dataset(data: object, path: str) -> list:
@@ -50,12 +57,32 @@ def load_model_and_tokenizer(checkpoint_path, device='cpu'):
     tokenizer = Tokenizer.from_file(os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer_v1.json"))
 
     # Cargar checkpoint completo (desactivar weights_only por compatibilidad)
+    torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, AnalogArgs])
     checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
 
     # Usar config del checkpoint
     config = checkpoint['args']
+    arch = checkpoint.get('arch', 'dense')
 
-    model = TinyThinker(config)
+    if arch == 'dense':
+        model = TinyThinker(config)
+    elif arch == 'moe':
+        model = TinyThinkerMoE(config)
+    elif arch == 'coga':
+        model = TinyThinkerCOGA(config)
+    elif arch == 'spectral':
+        model = SpectralThinker(config)
+    elif arch == 'spectral_v4':
+        model = SpectralThinkerV4(config)
+    elif arch == 'spectral_v5':
+        model = SpectralThinkerV5(config)
+    elif arch == 'coga_spectral':
+        model = TinyThinkerCogaSpectral(config)
+    elif arch == 'analog':
+        model = TinyThinkerAnalog(config)
+    else:
+        raise ValueError(f"Unknown architecture: {arch}")
+
     model.load_state_dict(checkpoint['model'])
     model.to(device)
     model.eval()
@@ -140,7 +167,8 @@ def generate_text(model, tokenizer, input_ids, max_new_tokens=50, temperature=1.
     past_key_values = None
     
     with torch.no_grad():
-        logits, past_key_values = model(x, use_cache=True)
+        x_cond = x[:, -model.args.max_seq_len:] if x.size(1) > model.args.max_seq_len else x
+        logits, past_key_values = model(x_cond, use_cache=True)
         next_token_logits = logits[:, -1, :] / temperature
         if top_k is not None:
             v, _ = torch.topk(next_token_logits, min(top_k, next_token_logits.size(-1)))

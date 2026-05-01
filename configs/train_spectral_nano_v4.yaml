@@ -1,0 +1,41 @@
+# =====================================================================
+# SpectralThinker — Nano v4 (No Weight Tying) — EXP-3
+# Objetivo: Replicar el v1 pero con la arquitectura limpia matrix-free
+# Uso:
+#   python scripts/train.py --config configs/train_spectral_nano_v4.yaml --arch spectral_v4 --device cpu
+# =====================================================================
+
+# --- Dimensiones base ---
+dim: 256
+n_layers: 6
+n_heads: 8
+n_kv_heads: 4
+vocab_size: 16384
+max_seq_len: 256
+
+# --- Parámetros espectrales ---
+# DCT Attention: núcleo 64x64 sobre proyecciones 256x256 => 4x compresión
+k_dim_attn: 64
+# Walsh FFN: núcleo 64x64 sobre proyecciones 256x256 => 4x compresión
+k_dim_ffn: 64
+# Walsh FFN: núcleo 128x128 sobre dimensión oculta 512x512 => 4x compresión
+k_hidden_ffn: 128
+
+# --- Entrenamiento ---
+batch_size: 16
+seq_len: 256
+max_iters: 5000
+learning_rate: 0.001
+min_lr: 0.00001
+warmup_iters: 200
+eval_interval: 250
+eval_iters: 20
+weight_decay: 0.1
+grad_clip: 1.0
+grad_accum_steps: 4
+use_gradient_checkpointing: false
+
+# --- Rutas ---
+data_path: data/train_v1.bin
+checkpoint_dir: checkpoints/spectral_nano_v4
+tokenizer_path: model/tokenizer_v1.json

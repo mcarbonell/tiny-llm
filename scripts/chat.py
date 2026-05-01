@@ -13,6 +13,10 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from model.model import TinyThinker, ModelArgs as DenseArgs
 from model.model_moe import TinyThinkerMoE, ModelArgs as MoEArgs
 from model.model_coga import TinyThinkerCOGA, ModelArgs as CogaArgs
+from model.model_spectral import SpectralThinker, SpectralArgs
+from model.model_spectral_v4 import SpectralThinker as SpectralThinkerV4, SpectralArgs as SpectralArgsV4
+from model.model_spectral_v5 import SpectralThinker as SpectralThinkerV5, SpectralArgs as SpectralArgsV5
+from model.model_coga_spectral import TinyThinkerCogaSpectral, CogaSpectralArgs
 
 # -----------------
 # Configuración
@@ -272,7 +276,7 @@ def main():
     tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
 
     print("Despertando a TinyThinker desde el disco...")
-    torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs])
+    torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, AnalogArgs])
     checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
     model_args = checkpoint['args']
     arch = checkpoint.get('arch', 'dense')
@@ -283,6 +287,14 @@ def main():
         model = TinyThinkerMoE(model_args)
     elif arch == 'coga':
         model = TinyThinkerCOGA(model_args)
+    elif arch == 'spectral':
+        model = SpectralThinker(model_args)
+    elif arch == 'spectral_v4':
+        model = SpectralThinkerV4(model_args)
+    elif arch == 'spectral_v5':
+        model = SpectralThinkerV5(model_args)
+    elif arch == 'coga_spectral':
+        model = TinyThinkerCogaSpectral(model_args)
     else:
         raise ValueError(f"Arquitectura desconocida en checkpoint: {arch}")
 
@@ -322,6 +334,10 @@ def main():
         except KeyboardInterrupt:
             print("\nSaliendo de la terminal...")
             break
+
+if __name__ == "__main__":
+    main()
+    break
 
 if __name__ == "__main__":
     main()

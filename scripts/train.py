@@ -16,6 +16,11 @@ from model.model import TinyThinker, ModelArgs as DenseArgs
 from model.model_moe import TinyThinkerMoE, ModelArgs as MoEArgs
 from model.model_coga import TinyThinkerCOGA, ModelArgs as CogaArgs
 from model.model_spectral import SpectralThinker, SpectralArgs
+from model.model_spectral_v4 import SpectralThinker as SpectralThinkerV4, SpectralArgs as SpectralArgsV4
+from model.model_spectral_v5 import SpectralThinker as SpectralThinkerV5, SpectralArgs as SpectralArgsV5
+from model.model_coga_spectral import TinyThinkerCogaSpectral, CogaSpectralArgs
+from model.model_analog import TinyThinkerAnalog, AnalogArgs
+from optim_swo import SmoothAdam
 
 # ----------------------------------
 # Configuración por Defecto
@@ -36,7 +41,8 @@ import yaml
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyThinker Pretrain — Versión Optimizada")
     parser.add_argument('--config', type=str, default=None, help='Ruta al config YAML. Sobreescribe otros argumentos.')
-    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral'], help='Arquitectura a entrenar.')
+    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'coga_spectral', 'analog'], help='Arquitectura a entrenar.')
+    parser.add_argument('--optimizer', type=str, default='adamw', choices=['adamw', 'swo'], help='Optimizador a utilizar.')
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'dml', 'mps'], help='Dispositivo de entrenamiento.')
     parser.add_argument('--resume', action='store_true', help='Reanudar desde el último checkpoint.')
     parser.add_argument('--max_iters', type=int, default=DEFAULT_MAX_ITERS, help='Número total de iteraciones.')
@@ -223,13 +229,47 @@ def main():
         spectral_args['k_hidden_ffn'] = getattr(args_cli, 'k_hidden_ffn', 128)
         model_args = SpectralArgs(**spectral_args)
         model = SpectralThinker(model_args)
+    elif arch == 'spectral_v4':
+        spectral_args = common_args.copy()
+        spectral_args['k_dim_attn']   = getattr(args_cli, 'k_dim_attn',   64)
+        spectral_args['k_dim_ffn']    = getattr(args_cli, 'k_dim_ffn',    64)
+        spectral_args['k_hidden_ffn'] = getattr(args_cli, 'k_hidden_ffn', 128)
+        model_args = SpectralArgsV4(**spectral_args)
+        model = SpectralThinkerV4(model_args)
+    elif arch == 'spectral_v5':
+        spectral_args = common_args.copy()
+        spectral_args['k_dim_attn']   = getattr(args_cli, 'k_dim_attn',   64)
+        spectral_args['k_dim_ffn']    = getattr(args_cli, 'k_dim_ffn',    64)
+        spectral_args['k_hidden_ffn'] = getattr(args_cli, 'k_hidden_ffn', 128)
+        spectral_args['k_seq_len']    = getattr(args_cli, 'k_seq_len',    64)
+        model_args = SpectralArgsV5(**spectral_args)
+        model = SpectralThinkerV5(model_args)
+    elif arch == 'coga_spectral':
+        coga_spec_args = common_args.copy()
+        coga_spec_args.pop('n_layers', None)
+        coga_spec_args['n_pre_layers']  = getattr(args_cli, 'n_pre_layers', 2)
+        coga_spec_args['n_core_layers'] = getattr(args_cli, 'n_core_layers', 4)
+        coga_spec_args['n_post_layers'] = getattr(args_cli, 'n_post_layers', 2)
+        coga_spec_args['max_recurrence_steps'] = getattr(args_cli, 'max_recurrence_steps', 4)
+        coga_spec_args['n_scratch_slots'] = getattr(args_cli, 'n_scratch_slots', 32)
+        coga_spec_args['n_experts'] = getattr(args_cli, 'n_experts', 8)
+        coga_spec_args['top_k'] = getattr(args_cli, 'top_k', 2)
+        coga_spec_args['n_reserved'] = getattr(args_cli, 'n_reserved', 4)
+        coga_spec_args['k_dim_attn']   = getattr(args_cli, 'k_dim_attn',   64)
+        coga_spec_args['k_dim_ffn']    = getattr(args_cli, 'k_dim_ffn',    64)
+        coga_spec_args['k_hidden_ffn'] = getattr(args_cli, 'k_hidden_ffn', 128)
+        model_args = CogaSpectralArgs(**coga_spec_args)
+        model = TinyThinkerCogaSpectral(model_args)
+    elif arch == 'analog':
+        model_args = AnalogArgs(**common_args)
+        model = TinyThinkerAnalog(model_args)
     else:
         raise ValueError(f"Arquitectura desconocida: {arch}")
         
     model.to(device)
     
     if args_cli.use_gradient_checkpointing:
-        if arch == 'coga':
+        if arch in ('coga', 'coga_spectral'):
             for layer in model.pre_layers: layer.use_checkpoint = True
             for layer in model.core_layers: layer.use_checkpoint = True
             for layer in model.post_layers: layer.use_checkpoint = True
@@ -238,7 +278,10 @@ def main():
 
     # En DirectML, foreach=True (por defecto) causa fallback a CPU y NaNs.
     weight_decay = getattr(args_cli, 'weight_decay', 0.1)
-    if _is_dml:
+    if args_cli.optimizer == 'swo':
+        print("[Optimizador] Usando SWO (SmoothAdam) - Compresión de estado al 93% (K=0.25)")
+        optimizer = SmoothAdam(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay, k_ratio=0.25)
+    elif _is_dml:
         print("[Optimizador] Usando DMLAdamW personalizado sin 'lerp_' para máxima compatibilidad con AMD")
         optimizer = DMLAdamW(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay)
     else:
@@ -258,7 +301,7 @@ def main():
         if os.path.exists(ckpt_path):
             print(f"[Resume] Cargando progreso desde {ckpt_path}...")
             # En PyTorch 2.6 we need to allowlist our custom classes
-            torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs])
+            torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs])
             checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
             model.load_state_dict(checkpoint['model'])
 
@@ -339,7 +382,7 @@ max_iters: {args_cli.max_iters}
 learning_rate: {args_cli.lr}
 --------------- MODEL PARAMS ----------
 dim: {model_args.dim}
-n_layers: {model_args.n_layers}
+n_layers: {getattr(model_args, 'n_layers', f"{getattr(model_args, 'n_pre_layers', 0)}+{getattr(model_args, 'n_core_layers', 0)}+{getattr(model_args, 'n_post_layers', 0)}")}
 n_heads: {model_args.n_heads}
 vocab_size: {model_args.vocab_size}
 TOTAL PARAMS: {total_params / 1e6:.2f}M
