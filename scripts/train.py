@@ -19,6 +19,7 @@ from model.model_spectral import SpectralThinker, SpectralArgs
 from model.model_spectral_v4 import SpectralThinker as SpectralThinkerV4, SpectralArgs as SpectralArgsV4
 from model.model_spectral_v5 import SpectralThinker as SpectralThinkerV5, SpectralArgs as SpectralArgsV5
 from model.model_spectral_v6 import SpectralThinker as SpectralThinkerV6, SpectralArgs as SpectralArgsV6
+from model.model_spectral_v7 import SpectralThinker as SpectralThinkerV7, SpectralArgs as SpectralArgsV7
 from model.model_coga_spectral import TinyThinkerCogaSpectral, CogaSpectralArgs
 from model.model_analog import TinyThinkerAnalog, AnalogArgs
 from model.model_auto_architect import TinyThinkerAutoArchitect, AutoArchitectArgs
@@ -44,7 +45,7 @@ import yaml
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyThinker Pretrain — Versión Optimizada")
     parser.add_argument('--config', type=str, default=None, help='Ruta al config YAML. Sobreescribe otros argumentos.')
-    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog'], help='Arquitectura a entrenar.')
+    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'spectral_v7', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog'], help='Arquitectura a entrenar.')
     parser.add_argument('--optimizer', type=str, default='adamw', choices=['adamw', 'swo'], help='Optimizador a utilizar.')
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'dml', 'mps'], help='Dispositivo de entrenamiento.')
     parser.add_argument('--resume', action='store_true', help='Reanudar desde el último checkpoint.')
@@ -255,6 +256,16 @@ def main():
         spectral_args['k_seq_len']    = getattr(args_cli, 'k_seq_len',    64)
         model_args = SpectralArgsV6(**spectral_args)
         model = SpectralThinkerV6(model_args)
+    elif arch == 'spectral_v7':
+        spectral_args = common_args.copy()
+        spectral_args['emb_dim']      = getattr(args_cli, 'emb_dim',     128)
+        spectral_args['k_vocab']      = getattr(args_cli, 'k_vocab',     128)
+        spectral_args['k_dim_attn']   = getattr(args_cli, 'k_dim_attn',   128)
+        spectral_args['k_dim_ffn']    = getattr(args_cli, 'k_dim_ffn',    128)
+        spectral_args['k_hidden_ffn'] = getattr(args_cli, 'k_hidden_ffn', 256)
+        spectral_args['k_seq_len']    = getattr(args_cli, 'k_seq_len',    64)
+        model_args = SpectralArgsV7(**spectral_args)
+        model = SpectralThinkerV7(model_args)
     elif arch == 'coga_spectral':
         coga_spec_args = common_args.copy()
         coga_spec_args.pop('n_layers', None)
@@ -441,15 +452,15 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
     t_print(f"Entrenamiento activo en {str(device).upper()} | Iteraciones: {iter_num}/{args_cli.max_iters}")
     t0 = time.time()
 
-    while iter_num < args_cli.max_iters:
+    while iter_num <= args_cli.max_iters:
         lr = get_lr(iter_num)
         for param_group in optimizer.param_groups: param_group['lr'] = lr
 
-        # Evaluación
-        if iter_num % DEFAULT_EVAL_INTERVAL == 0 and iter_num > 0:
+        # Evaluación y Checkpoint
+        if iter_num % DEFAULT_EVAL_INTERVAL == 0 or iter_num == args_cli.max_iters:
             losses = estimate_loss()
             t_print(f"Iter {iter_num}: train_loss {losses['train']:.4f}, val_loss {losses['val']:.4f}")
-            
+
             checkpoint = {
                 'model': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
@@ -466,13 +477,13 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
                 t_print(f" -> Nuevo mejor modelo (val_loss: {best_val_loss:.4f})")
             else:
                 plateau_counter += 1
-                
+
             # Lógica Neurogénesis Residual (Auto-Architect V170)
             if arch in ('auto_architect', 'auto_analog') and plateau_counter >= 3:
                 t_print(f"🌱 [{arch.upper()}] Estancamiento detectado (Paciencia 3). Aplicando Neurogénesis...")
                 model.add_residual_layer()
                 model.to(device)
-                
+
                 # Reinstanciar optimizador para capturar solo los nuevos parámetros (grad=True)
                 if args_cli.optimizer == 'swo':
                     optimizer = SuperMarioOptimizer(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay, k_ratio=0.25)
@@ -480,10 +491,14 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
                     optimizer = DMLAdamW(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay)
                 else:
                     optimizer = torch.optim.AdamW(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay, foreach=False)
-                
+
                 plateau_counter = 0
                 best_val_loss = losses['val'] # Reset baseline para la nueva capa especializados
                 t_print(f"✅ Optimizador reiniciado. Parámetros totales: {sum(p.numel() for p in model.parameters())/1e6:.2f}M")
+
+        # Salir si llegamos al límite
+        if iter_num >= args_cli.max_iters:
+            break
 
         # Paso de entrenamiento
         optimizer.zero_grad(set_to_none=True)
@@ -500,7 +515,7 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
 
         if scaler.is_enabled(): scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        
+
         if scaler.is_enabled():
             scaler.step(optimizer)
             scaler.update()
@@ -517,7 +532,6 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
             t_print(f"iter {iter_num:5d} | loss {loss_val:.4f} | lr {lr:.2e} | time {dt:.2f}s")
 
         iter_num += 1
-
     t_print("Entrenamiento completado exitosamente.")
 
 if __name__ == "__main__":

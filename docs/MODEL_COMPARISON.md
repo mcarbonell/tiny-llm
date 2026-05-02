@@ -10,6 +10,19 @@
 | 🥇 | **Dense Baseline** | 15.5M | 5,000 | **2.9000** | ✅ Control | Standard Transformer (Control Group) |
 | 🥈 | **Analog Nano** | 15.47M | 5,000 | **2.9913** | ✅ Stable | 4 Math Banks (SUM, PROD, VAR, SIN) |
 | 🥉 | **Auto-Analog (V197)** | 13.11M | 10,000 | **3.2656** | ✅ Evolved | Heterogeneous Neurogenesis (4 layers) |
+| 4 | **Spectral V6 (Causal)** | 8.64M | 5,000 | **3.7595** | ✅ Validated | Strictly Causal Temporal JPEG Cache |
+
+---
+
+## 🌟 The High-Resolution Era (V2)
+
+As of May 2, 2026, we have transitioned to the **V2 Dataset & Tokenizer**.
+- **Dataset:** `data/train_v2_32k.bin` (100M tokens: Wiki, Chat, Code, Logic).
+- **Tokenizer:** `model/tokenizer_v2_32k.json` (32,768 vocabulary).
+
+### Current V2 Experiments:
+1. **Spectral V6 HD (dim: 1024):** [IN PROGRESS] 🚀 - Target: TinyLlama-level intelligence.
+2. **Spectral V6 Mega (dim: 2048):** [PLANNED] - Target: Llama-3-level semantic resolution.
 
 ---
 

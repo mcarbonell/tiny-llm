@@ -1,0 +1,39 @@
+# =====================================================================
+# TinyThinker Spectral V6 "Mega" — Dim 2048
+# Objetivo: Resolución de nivel Llama-3 (8B) en hardware doméstico.
+# =====================================================================
+
+# --- Dimensiones ---
+dim: 2048
+n_layers: 6
+n_heads: 32
+n_kv_heads: 8
+vocab_size: 32768
+max_seq_len: 512
+
+# --- Configuración Spectral ---
+k_dim_attn: 128
+k_dim_ffn: 128
+k_hidden_ffn: 256
+k_seq_len: 64
+
+# --- Entrenamiento ---
+batch_size: 4
+seq_len: 512
+max_iters: 10000       # Aumentado para aprovechar el nuevo dataset masivo
+learning_rate: 0.0005
+min_lr: 0.00001
+warmup_iters: 1000
+eval_interval: 250
+eval_iters: 15
+weight_decay: 0.1
+grad_clip: 1.0
+grad_accum_steps: 16
+
+# --- Sistema ---
+data_path: data/train_v2_32k.bin
+checkpoint_dir: checkpoints/spectral_v6_2048_v2
+tokenizer_path: model/tokenizer_v2_32k.json
+arch: spectral_v6
+optimizer: swo
+device: cpu
