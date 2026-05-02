@@ -18,6 +18,7 @@ from model.model_coga import TinyThinkerCOGA, ModelArgs as CogaArgs
 from model.model_spectral import SpectralThinker, SpectralArgs
 from model.model_spectral_v4 import SpectralThinker as SpectralThinkerV4, SpectralArgs as SpectralArgsV4
 from model.model_spectral_v5 import SpectralThinker as SpectralThinkerV5, SpectralArgs as SpectralArgsV5
+from model.model_spectral_v6 import SpectralThinker as SpectralThinkerV6, SpectralArgs as SpectralArgsV6
 from model.model_coga_spectral import TinyThinkerCogaSpectral, CogaSpectralArgs
 from model.model_analog import TinyThinkerAnalog, AnalogArgs
 from model.model_auto_architect import TinyThinkerAutoArchitect, AutoArchitectArgs
@@ -43,7 +44,7 @@ import yaml
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyThinker Pretrain — Versión Optimizada")
     parser.add_argument('--config', type=str, default=None, help='Ruta al config YAML. Sobreescribe otros argumentos.')
-    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog'], help='Arquitectura a entrenar.')
+    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog'], help='Arquitectura a entrenar.')
     parser.add_argument('--optimizer', type=str, default='adamw', choices=['adamw', 'swo'], help='Optimizador a utilizar.')
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'dml', 'mps'], help='Dispositivo de entrenamiento.')
     parser.add_argument('--resume', action='store_true', help='Reanudar desde el último checkpoint.')
@@ -246,6 +247,14 @@ def main():
         spectral_args['k_seq_len']    = getattr(args_cli, 'k_seq_len',    64)
         model_args = SpectralArgsV5(**spectral_args)
         model = SpectralThinkerV5(model_args)
+    elif arch == 'spectral_v6':
+        spectral_args = common_args.copy()
+        spectral_args['k_dim_attn']   = getattr(args_cli, 'k_dim_attn',   64)
+        spectral_args['k_dim_ffn']    = getattr(args_cli, 'k_dim_ffn',    64)
+        spectral_args['k_hidden_ffn'] = getattr(args_cli, 'k_hidden_ffn', 128)
+        spectral_args['k_seq_len']    = getattr(args_cli, 'k_seq_len',    64)
+        model_args = SpectralArgsV6(**spectral_args)
+        model = SpectralThinkerV6(model_args)
     elif arch == 'coga_spectral':
         coga_spec_args = common_args.copy()
         coga_spec_args.pop('n_layers', None)
