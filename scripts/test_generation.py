@@ -14,9 +14,10 @@ from model.model_spectral_v4 import SpectralThinker as SpectralThinkerV4, Spectr
 from model.model_spectral_v5 import SpectralThinker as SpectralThinkerV5, SpectralArgs as SpectralArgsV5
 from model.model_coga_spectral import TinyThinkerCogaSpectral, CogaSpectralArgs
 from model.model_analog import TinyThinkerAnalog, AnalogArgs
+from model.model_auto_analog import TinyThinkerAutoAnalog, AutoAnalogArgs
 
 def load_checkpoint(ckpt_path, device='cpu'):
-    torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, AnalogArgs])
+    torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, AnalogArgs, AutoAnalogArgs])
     checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
     args = checkpoint['args']
     arch = checkpoint.get('arch', 'dense')
@@ -37,6 +38,8 @@ def load_checkpoint(ckpt_path, device='cpu'):
         model = TinyThinkerCogaSpectral(args)
     elif arch == 'analog':
         model = TinyThinkerAnalog(args)
+    elif arch == 'auto_analog':
+        model = TinyThinkerAutoAnalog(args)
     else:
         raise ValueError(f"Unknown architecture: {arch}")
 

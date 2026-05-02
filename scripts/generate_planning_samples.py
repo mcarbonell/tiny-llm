@@ -139,34 +139,41 @@ RULES:
 2. The <think> section must be analytical and show professional reasoning.
 3. The Plan must be a numbered list of atomic, actionable steps.
 4. For the 'agentic' domain, use the COGA primitives listed above in the plan.
-5. For other domains, use natural language but you can use coprocessor calls if needed.
-6. Start immediately with 'Goal:'.
+5. START immediately with 'Goal:'.
+
+SPECIAL SCENARIO (Apply if requested): "SELF-CORRECTION LOOP"
+In this scenario, something must go wrong in the middle of the plan. 
+You must include a step like: "ERROR: [Describe obstacle]. REVISING PLAN..."
+Then use WRITE(new_plan) to update the scratchpad with the corrected steps.
 """
 
-def validate_sample(text, domain):
+def validate_sample(text, domain, is_correction=False):
     # Basic structural check: Must have a Goal and a Plan
     if not ("Goal:" in text and "Plan:" in text):
         return False
         
-    # We removed the strict <think> validation to allow more flexible model outputs
-    # but we still want some meat in the response
     if len(text) < 100: 
         return False
         
+    if is_correction and "REVISING PLAN" not in text:
+        return False
+        
     if domain == "agentic":
-        # For agentic, we still prefer seeing at least one COGA-like primitive/function call
         primitives = ["remember", "recall", "WRITE", "EDIT", "calc", "lookup", "verify", "execute_code", "(", ")"]
         if not any(p in text for p in primitives):
-            # Not a hard failure, but good to note
             pass
             
     return True
 
-def get_sample(domain, topic, model_name=MODEL_NAME):
+def get_sample(domain, topic, is_correction=False, model_name=MODEL_NAME):
     prompt = get_system_prompt(domain)
     
+    variation = ""
+    if is_correction:
+        variation = "\nACTIVATE SPECIAL SCENARIO: This must be a 'SELF-CORRECTION LOOP'. An obstacle must appear and you must revise the plan."
+
     user_instruction = (
-        f"Create a complex Planning sample about: {topic}.\n"
+        f"Create a complex Planning sample about: {topic}.{variation}\n"
         f"Ensure the plan handles non-obvious constraints.\n"
         f"Random entropy seed: {random.randint(1, 10000)}."
     )
@@ -255,7 +262,9 @@ def main():
     
     while success_count < target:
         topic = random.choice(DOMAINS[domain]['topics'])
-        res = get_sample(domain, topic, model_name=model_name)
+        # 20% de probabilidad de generar un escenario de auto-corrección
+        is_correction = random.random() < 0.20
+        res = get_sample(domain, topic, is_correction=is_correction, model_name=model_name)
         
         if res:
             with open(output_path, "a", encoding="utf-8") as f:
@@ -263,6 +272,7 @@ def main():
                     "text": res,
                     "domain": domain,
                     "topic": topic,
+                    "is_correction": is_correction,
                     "model": model_name,
                     "timestamp": time.ctime()
                 }

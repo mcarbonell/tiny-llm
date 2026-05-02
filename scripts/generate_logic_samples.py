@@ -16,26 +16,42 @@ def generate_silogism():
     s, g, p = subjects[idx], groups[idx], properties[idx]
     
     prompt = f"Si todos los {g}s son {p}es y {s} es un {g}, ¿qué se puede afirmar sobre {s}?"
-    thought = f"ASSERT todos {g}s -> {p}. ASSERT {s} -> {g}. THEN {s} -> {p} (Silogismo categórico)."
+    thought = f"ASSERT todos {g}s -> {p}. ASSERT {s} -> {g}. THEN {s} -> {p} [Law: Syllogism]."
     answer = f"{s} es {p}."
-    return f"[SYSTEM] Eres un asistente lógico. [/SYSTEM] Pregunta: {prompt} <think> {thought} </think> Respuesta: {answer}"
+    return f"Pregunta: {prompt} <think> {thought} </think> Respuesta: {answer}"
 
 def generate_math_logic():
     a = random.randint(1, 50)
     b = random.randint(1, 50)
     c = a + b
     prompt = f"Si tengo {a} naranjas y me regalan {b}, ¿cuántas tengo ahora?"
-    thought = f"STEP 1: Identificar cantidad inicial ({a}). STEP 2: Identificar cantidad añadida ({b}). STEP 3: Operación SUMA. <calc>{a} + {b} = {c}</calc>. VERIFY resultado."
+    thought = f"STEP 1: Identificar cantidad inicial ({a}). STEP 2: Identificar cantidad añadida ({b}). STEP 3: Operación SUMA [Law: Addition]. <calc>{a} + {b} = {c}</calc>."
     answer = f"Ahora tienes {c} naranjas."
-    return f"[SYSTEM] Asistente Matemático. [/SYSTEM] Pregunta: {prompt} <think> {thought} </think> {answer}"
+    return f"Pregunta: {prompt} <think> {thought} </think> Respuesta: {answer}"
 
-def generate_coding_logic():
-    var_name = random.choice(["x", "y", "contador", "total"])
-    val = random.randint(0, 10)
-    prompt = f"¿Qué hace este código: {var_name} = {val}; if ({var_name} > 5) print('Grande')?"
-    thought = f"ASSERT {var_name} = {val}. VERIFY condicion {var_name} > 5. BECAUSE {val} {'es' if val > 5 else 'no es'} mayor que 5, THEN el código {'imprimirá' if val > 5 else 'no imprimirá'} 'Grande'."
-    answer = f"El código imprimirá 'Grande'" if val > 5 else "El código no imprimirá nada."
-    return f"[SYSTEM] Analista de Código. [/SYSTEM] Pregunta: {prompt} <think> {thought} </think> {answer}"
+def generate_cyclic_logic():
+    """Generador basado en V194-V195: Razonamiento de Módulo."""
+    days = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+    start_idx = random.randint(0, 6)
+    offset = random.randint(1, 14)
+    target_idx = (start_idx + offset) % 7
+    
+    prompt = f"Si hoy es {days[start_idx]}, ¿qué día será dentro de {offset} días?"
+    thought = f"Identificar ciclo: 7 días [Law: Modulus]. Calcular: ({start_idx} + {offset}) % 7 = {target_idx}. Mapear índice a día."
+    answer = f"Será {days[target_idx]}."
+    return f"Pregunta: {prompt} <think> {thought} </think> Respuesta: {answer}"
+
+def generate_pattern_logic():
+    """Generador de extrapolación de patrones (V190)."""
+    elements = ["A", "B", "C", "X", "Y", "Z", "1", "2", "3"]
+    pattern_len = random.randint(2, 3)
+    pattern = [random.choice(elements) for _ in range(pattern_len)]
+    full_seq = pattern * 4
+    
+    prompt = f"Completa la secuencia: {', '.join(full_seq[:-1])}, ..."
+    thought = f"Detectar periodo: {pattern_len} [Law: Pattern Recognition]. El siguiente elemento debe ser {full_seq[-1]}."
+    answer = f"El siguiente es {full_seq[-1]}."
+    return f"Pregunta: {prompt} <think> {thought} </think> Respuesta: {answer}"
 
 def main():
     if not os.path.exists(TOKENIZER_PATH):
@@ -45,13 +61,18 @@ def main():
     tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
     eos_id = tokenizer.token_to_id("<eos>") or 0
     
-    print("Generando 5000 muestras de lógica sintética...")
+    print("Generando 10,000 muestras de lógica avanzada (V195)...")
     samples = []
-    generators = [generate_silogism, generate_math_logic, generate_coding_logic]
+    generators = [generate_silogism, generate_math_logic, generate_cyclic_logic, generate_pattern_logic]
     
-    for _ in range(5000):
+    for _ in range(10000):
         gen = random.choice(generators)
         samples.append(gen())
+    
+    print("\n--- MUESTRAS GENERADAS (EJEMPLOS) ---")
+    for i in range(5):
+        print(f"Muestra {i+1}: {samples[i]}")
+    print("------------------------------------\n")
     
     # Tokenizar y guardar
     all_tokens = []

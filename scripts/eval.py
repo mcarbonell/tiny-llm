@@ -268,6 +268,14 @@ def main():
     model, tokenizer, config = load_model_and_tokenizer(args.checkpoint, device)
 
     total_params = sum(p.numel() for p in model.parameters())
+    # Obtener n_layers de forma segura
+    if hasattr(config, 'n_layers'):
+        n_layers_str = str(config.n_layers)
+    elif hasattr(config, 'n_pre_layers'):
+        n_layers_str = f"{config.n_pre_layers}+{config.n_core_layers}+{config.n_post_layers}"
+    else:
+        n_layers_str = "N/A"
+
     print(f"""========================================
 EVALUATION SESSION
 DATE: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -275,7 +283,7 @@ DEVICE: {str(device).upper()}
 CHECKPOINT: {os.path.basename(args.checkpoint)}
 --------------- MODEL PARAMS ----------
 dim: {config.dim}
-n_layers: {config.n_layers}
+n_layers: {n_layers_str}
 n_heads: {config.n_heads}
 vocab_size: {config.vocab_size}
 TOTAL PARAMS: {total_params / 1e6:.2f}M

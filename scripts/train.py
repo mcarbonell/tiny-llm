@@ -20,7 +20,9 @@ from model.model_spectral_v4 import SpectralThinker as SpectralThinkerV4, Spectr
 from model.model_spectral_v5 import SpectralThinker as SpectralThinkerV5, SpectralArgs as SpectralArgsV5
 from model.model_coga_spectral import TinyThinkerCogaSpectral, CogaSpectralArgs
 from model.model_analog import TinyThinkerAnalog, AnalogArgs
-from optim_swo import SmoothAdam
+from model.model_auto_architect import TinyThinkerAutoArchitect, AutoArchitectArgs
+from model.model_auto_analog import TinyThinkerAutoAnalog, AutoAnalogArgs
+from optim_supermario import SuperMarioOptimizer
 
 # ----------------------------------
 # Configuración por Defecto
@@ -41,7 +43,7 @@ import yaml
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyThinker Pretrain — Versión Optimizada")
     parser.add_argument('--config', type=str, default=None, help='Ruta al config YAML. Sobreescribe otros argumentos.')
-    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'coga_spectral', 'analog'], help='Arquitectura a entrenar.')
+    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog'], help='Arquitectura a entrenar.')
     parser.add_argument('--optimizer', type=str, default='adamw', choices=['adamw', 'swo'], help='Optimizador a utilizar.')
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'dml', 'mps'], help='Dispositivo de entrenamiento.')
     parser.add_argument('--resume', action='store_true', help='Reanudar desde el último checkpoint.')
@@ -263,6 +265,19 @@ def main():
     elif arch == 'analog':
         model_args = AnalogArgs(**common_args)
         model = TinyThinkerAnalog(model_args)
+    elif arch == 'auto_architect':
+        auto_args = common_args.copy()
+        auto_args.pop('n_layers', None) # Auto-Architect empieza con 1
+        auto_args['k_dim_attn']   = getattr(args_cli, 'k_dim_attn',   64)
+        auto_args['k_dim_ffn']    = getattr(args_cli, 'k_dim_ffn',    64)
+        auto_args['k_hidden_ffn'] = getattr(args_cli, 'k_hidden_ffn', 128)
+        model_args = AutoArchitectArgs(**auto_args)
+        model = TinyThinkerAutoArchitect(model_args)
+    elif arch == 'auto_analog':
+        auto_args = common_args.copy()
+        auto_args.pop('n_layers', None) # Auto-Analog empieza con 1
+        model_args = AutoAnalogArgs(**auto_args)
+        model = TinyThinkerAutoAnalog(model_args)
     else:
         raise ValueError(f"Arquitectura desconocida: {arch}")
         
@@ -279,8 +294,8 @@ def main():
     # En DirectML, foreach=True (por defecto) causa fallback a CPU y NaNs.
     weight_decay = getattr(args_cli, 'weight_decay', 0.1)
     if args_cli.optimizer == 'swo':
-        print("[Optimizador] Usando SWO (SmoothAdam) - Compresión de estado al 93% (K=0.25)")
-        optimizer = SmoothAdam(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay, k_ratio=0.25)
+        print("[Optimizador] Usando SMO (SuperMarioOptimizer) - Compresión de estado al 93% (K=0.25)")
+        optimizer = SuperMarioOptimizer(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay, k_ratio=0.25)
     elif _is_dml:
         print("[Optimizador] Usando DMLAdamW personalizado sin 'lerp_' para máxima compatibilidad con AMD")
         optimizer = DMLAdamW(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay)
@@ -289,6 +304,7 @@ def main():
     
     iter_num = 0
     best_val_loss = 1e9
+    plateau_counter = 0
 
     # ----------------------------------
     # 4. Lógica de Reanudación
@@ -365,7 +381,16 @@ def main():
             f.write(full_msg + "\n")
 
     total_params = sum(p.numel() for p in model.parameters())
-    model_file = f"model/model_{arch}.py" if arch != 'dense' else "model/model.py"  # spectral -> model/model_spectral.py
+    model_file = f"model/model_{arch}.py" if arch != 'dense' else "model/model.py"
+    
+    # Resolver n_layers para el display
+    if hasattr(model_args, 'n_layers'):
+        n_layers_str = str(model_args.n_layers)
+    elif arch in ('auto_architect', 'auto_analog'):
+        n_layers_str = str(len(model.layers))
+    else:
+        n_layers_str = f"{getattr(model_args, 'n_pre_layers', 0)}+{getattr(model_args, 'n_core_layers', 0)}+{getattr(model_args, 'n_post_layers', 0)}"
+
     header = f"""========================================
 DATE: {start_date.strftime('%Y-%m-%d %H:%M:%S')}
 DEVICE: {str(device).upper()}
@@ -382,7 +407,7 @@ max_iters: {args_cli.max_iters}
 learning_rate: {args_cli.lr}
 --------------- MODEL PARAMS ----------
 dim: {model_args.dim}
-n_layers: {getattr(model_args, 'n_layers', f"{getattr(model_args, 'n_pre_layers', 0)}+{getattr(model_args, 'n_core_layers', 0)}+{getattr(model_args, 'n_post_layers', 0)}")}
+n_layers: {n_layers_str}
 n_heads: {model_args.n_heads}
 vocab_size: {model_args.vocab_size}
 TOTAL PARAMS: {total_params / 1e6:.2f}M
@@ -415,8 +440,29 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
             torch.save(checkpoint, os.path.join(out_dir, 'ckpt_pretrain_latest.pt'))
             if losses['val'] < best_val_loss:
                 best_val_loss = losses['val']
+                plateau_counter = 0
                 torch.save(checkpoint, os.path.join(out_dir, 'ckpt_pretrain_best.pt'))
                 t_print(f" -> Nuevo mejor modelo (val_loss: {best_val_loss:.4f})")
+            else:
+                plateau_counter += 1
+                
+            # Lógica Neurogénesis Residual (Auto-Architect V170)
+            if arch in ('auto_architect', 'auto_analog') and plateau_counter >= 3:
+                t_print(f"🌱 [{arch.upper()}] Estancamiento detectado (Paciencia 3). Aplicando Neurogénesis...")
+                model.add_residual_layer()
+                model.to(device)
+                
+                # Reinstanciar optimizador para capturar solo los nuevos parámetros (grad=True)
+                if args_cli.optimizer == 'swo':
+                    optimizer = SuperMarioOptimizer(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay, k_ratio=0.25)
+                elif _is_dml:
+                    optimizer = DMLAdamW(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay)
+                else:
+                    optimizer = torch.optim.AdamW(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay, foreach=False)
+                
+                plateau_counter = 0
+                best_val_loss = losses['val'] # Reset baseline para la nueva capa especializados
+                t_print(f"✅ Optimizador reiniciado. Parámetros totales: {sum(p.numel() for p in model.parameters())/1e6:.2f}M")
 
         # Paso de entrenamiento
         optimizer.zero_grad(set_to_none=True)

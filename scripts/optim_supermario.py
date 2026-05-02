@@ -1,7 +1,9 @@
 """
-optim_swo.py — Smooth Walsh Optimizer (SWO) / SmoothAdam
+optim_supermario.py — SuperMario Optimizer (SMO)
 
-Implementación basada en los hallazgos V125 (Smooth Spectral Adam).
+Implementación basada en los hallazgos V125 (Smooth Spectral Adam) y renombrada
+en honor a Mario, el arquitecto de TinyThinker.
+
 Este optimizador reduce drásticamente el consumo de memoria RAM (hasta un 93%)
 comprimiendo los estados históricos del gradiente (Momentum 'm' y Varianza 'v')
 utilizando interpolación bilineal (proxy espacial para compresión espectral de baja frecuencia).
@@ -15,7 +17,7 @@ import torch
 from torch.optim.optimizer import Optimizer
 import torch.nn.functional as F
 
-class SmoothAdam(Optimizer):
+class SuperMarioOptimizer(Optimizer):
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0, k_ratio=0.25):
         """
@@ -35,7 +37,7 @@ class SmoothAdam(Optimizer):
 
         defaults = dict(lr=lr, betas=betas, eps=eps,
                         weight_decay=weight_decay, k_ratio=k_ratio)
-        super(SmoothAdam, self).__init__(params, defaults)
+        super(SuperMarioOptimizer, self).__init__(params, defaults)
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -51,7 +53,7 @@ class SmoothAdam(Optimizer):
                 
                 grad = p.grad
                 if grad.is_sparse:
-                    raise RuntimeError('SmoothAdam no soporta gradientes sparse.')
+                    raise RuntimeError('SuperMarioOptimizer no soporta gradientes sparse.')
 
                 state = self.state[p]
                 k_ratio = group['k_ratio']

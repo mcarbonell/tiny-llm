@@ -168,13 +168,15 @@ def get_system_prompt(level):
 
 CRITICAL REQUIREMENTS:
 1. Question must require genuine logical thinking, not just recall.
-2. The <think> section must show the complete reasoning process that leads to the answer.
-3. Use {config['vocab']}.
-4. Make the thinking section about {config['think_length']}.
+2. The <think> section must show the complete reasoning process.
+3. IMPORTANT: You must explicitly state the mathematical or logical laws used in the thinking section using the format [Law: Name of the Law]. 
+   Examples: [Law: Transitivity], [Law: Modulus], [Law: Substitution], [Law: Syllogism].
+4. Use {config['vocab']}.
+5. Make the thinking section about {config['think_length']}.
 
 REQUIRED FORMAT:
 Question: [The puzzle or riddle]
-<think> [Step-by-step reasoning. Show how you combine clues, eliminate possibilities, or calculate.] </think>
+<think> [Step-by-step reasoning. Explicitly include [Law: ...] tags where appropriate.] </think>
 Answer: [Final answer]
 
 ADDITIONAL RULES:
@@ -207,12 +209,15 @@ def validate_sample(text, level):
         return False
         
     # Check for reasoning connectors (especially for levels > 0)
-    # Added Spanish connectors for bilingual support
     reasoning_connectors = [
         "because", "therefore", "since", "so", "thus", "if", "then", "leads to", "conclude", "implies",
         "porque", "entonces", "ya que", "por lo tanto", "así que", "si", "concluyo", "implica", "puesto que"
     ]
     if level > 0 and not any(conn in thought.lower() for conn in reasoning_connectors):
+        return False
+    
+    # Check for explicit law tags [Law: ...] - Especially for level > 1
+    if level > 1 and "[Law:" not in thought:
         return False
     
     return True

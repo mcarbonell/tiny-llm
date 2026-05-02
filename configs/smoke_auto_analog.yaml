@@ -1,0 +1,16 @@
+# Smoke test for Auto-Analog
+dim: 64
+n_heads: 4
+n_kv_heads: 2
+vocab_size: 16384
+max_seq_len: 128
+
+batch_size: 4
+seq_len: 128
+max_iters: 10
+learning_rate: 0.001
+eval_interval: 5
+eval_iters: 2
+data_path: data/train_v1.bin
+checkpoint_dir: checkpoints/smoke_auto_analog
+tokenizer_path: model/tokenizer_v1.json

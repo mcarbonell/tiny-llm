@@ -1,0 +1,30 @@
+# =====================================================================
+# Auto-Analog-Architect — EXP-10
+# Objetivo: Modelo híbrido que crece en profundidad usando bancos analógicos.
+# =====================================================================
+
+# --- Dimensiones base ---
+dim: 256
+n_heads: 8
+n_kv_heads: 4
+vocab_size: 16384
+max_seq_len: 512
+
+# --- Entrenamiento ---
+batch_size: 16
+seq_len: 512
+max_iters: 10000
+learning_rate: 0.001
+min_lr: 0.00001
+warmup_iters: 500
+eval_interval: 250   # Evaluación frecuente para detectar plateaus rápido
+eval_iters: 25
+weight_decay: 0.1
+grad_clip: 1.0
+grad_accum_steps: 4
+use_gradient_checkpointing: false
+
+# --- Rutas ---
+data_path: data/train_v1.bin
+checkpoint_dir: checkpoints/auto_analog_v1
+tokenizer_path: model/tokenizer_v1.json
