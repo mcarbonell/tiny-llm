@@ -1,0 +1,41 @@
+# =====================================================================
+# TinyThinker Spectral V5 (JPEG-LLM) — Benchmark de Control
+# Objetivo: Validar la compresión temporal del KV-Cache (V65)
+# frente a modelos densos y analógicos.
+# =====================================================================
+
+# --- Dimensiones Base (Mismas que benchmarks anteriores) ---
+dim: 256
+n_layers: 6
+n_heads: 8
+n_kv_heads: 4
+vocab_size: 16384
+max_seq_len: 256
+
+# --- Configuración Spectral V5 (V65) ---
+k_dim_attn: 64
+k_dim_ffn: 64
+k_hidden_ffn: 128
+k_seq_len: 64   # Compresión temporal al 25% (256 -> 64)
+
+# --- Entrenamiento (Mismos Hiperparámetros) ---
+batch_size: 16
+seq_len: 256
+max_iters: 5000
+learning_rate: 0.001
+min_lr: 0.00001
+warmup_iters: 200
+eval_interval: 250
+eval_iters: 20
+weight_decay: 0.1
+grad_clip: 1.0
+grad_accum_steps: 4
+use_gradient_checkpointing: false
+
+# --- Configuración del Sistema ---
+data_path: data/train_v1.bin
+checkpoint_dir: checkpoints/benchmark_spectral_v5
+tokenizer_path: model/tokenizer_v1.json
+arch: spectral_v5
+optimizer: adamw
+device: cpu

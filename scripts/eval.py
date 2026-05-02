@@ -17,6 +17,7 @@ from model.model_spectral_v4 import SpectralThinker as SpectralThinkerV4, Spectr
 from model.model_spectral_v5 import SpectralThinker as SpectralThinkerV5, SpectralArgs as SpectralArgsV5
 from model.model_coga_spectral import TinyThinkerCogaSpectral, CogaSpectralArgs
 from model.model_analog import TinyThinkerAnalog, AnalogArgs
+from model.model_auto_analog import TinyThinkerAutoAnalog, AutoAnalogArgs
 
 
 def validate_dataset(data: object, path: str) -> list:
@@ -53,12 +54,45 @@ def validate_dataset(data: object, path: str) -> list:
 
 
 def load_model_and_tokenizer(checkpoint_path, device='cpu'):
-    """Carga el modelo y tokenizador."""
+    """Carga el modelo y tokenizador (Soporta .pt y .tiny V198 High-Fidelity)."""
     tokenizer = Tokenizer.from_file(os.path.join(os.path.dirname(__file__), "..", "model", "tokenizer_v1.json"))
-
-    # Cargar checkpoint completo (desactivar weights_only por compatibilidad)
-    torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, AnalogArgs])
-    checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+    
+    # 1. Manejo de archivos comprimidos .tiny (V198)
+    if checkpoint_path.endswith('.tiny'):
+        import zlib
+        import io
+        import math
+        print(f"📂 Descomprimiendo paquete V198 Hi-Fi: {os.path.basename(checkpoint_path)}...")
+        with open(checkpoint_path, "rb") as f:
+            compressed_data = f.read()
+        raw_bytes = zlib.decompress(compressed_data)
+        buffer = io.BytesIO(raw_bytes)
+        
+        torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, AnalogArgs, AutoAnalogArgs])
+        checkpoint = torch.load(buffer, map_location='cpu', weights_only=False)
+        
+        # 2. Reconstrucción Espectral Inversa
+        from scripts.compress_model import get_dct_matrix
+        state_dict = checkpoint['model']
+        reconstructed_state = {}
+        
+        for name, entry in state_dict.items():
+            if isinstance(entry, dict) and entry.get('type') == 'spectral_dct_v198':
+                # W_spatial = D_out.T @ W_spectral @ D_in
+                spectral_coeffs = entry['data']
+                out_f, in_f = spectral_coeffs.shape
+                d_out = get_dct_matrix(out_f).to(spectral_coeffs.dtype)
+                d_in = get_dct_matrix(in_f).to(spectral_coeffs.dtype)
+                
+                # Invertir transformada
+                reconstructed_state[name] = d_out.t() @ spectral_coeffs @ d_in
+            else:
+                reconstructed_state[name] = entry
+        checkpoint['model'] = reconstructed_state
+    else:
+        # Carga estándar .pt
+        torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, AnalogArgs, AutoAnalogArgs])
+        checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
 
     # Usar config del checkpoint
     config = checkpoint['args']
@@ -80,9 +114,30 @@ def load_model_and_tokenizer(checkpoint_path, device='cpu'):
         model = TinyThinkerCogaSpectral(config)
     elif arch == 'analog':
         model = TinyThinkerAnalog(config)
+    elif arch == 'auto_analog':
+        model = TinyThinkerAutoAnalog(config)
     else:
         raise ValueError(f"Unknown architecture: {arch}")
 
+    # Lógica para modelos evolutivos (Neurogénesis)
+    if arch in ('auto_architect', 'auto_analog'):
+        # Contar cuántas capas hay realmente en el state_dict
+        layer_indices = set([int(k.split('.')[1]) for k in checkpoint['model'].keys() if k.startswith('layers.')])
+        target_num_layers = max(layer_indices) + 1 if layer_indices else 1
+        
+        # Empezamos con la capa 0 (que ya existe), y añadimos las demás
+        while len(model.layers) < target_num_layers:
+            curr_idx = len(model.layers)
+            # Detectar tipo de capa en el checkpoint para esta posición
+            is_lateral = any(f"layers.{curr_idx}.lateral" in k for k in checkpoint['model'].keys())
+            
+            if is_lateral:
+                from model.model_lateral_v197 import ResidualLateralBlock
+                model.layers.append(ResidualLateralBlock(config.dim))
+            else:
+                from model.model_auto_analog import ResidualAnalogLayer
+                model.layers.append(ResidualAnalogLayer(config))
+    
     model.load_state_dict(checkpoint['model'])
     model.to(device)
     model.eval()

@@ -343,7 +343,9 @@ class SpectralAttentionV5(nn.Module):
             xv_approx = self._decompress_temporal(xv_to_save, seqlen, x.device)
             
             xq_t, xk_t, xv_t = xq.transpose(1,2), xk_approx.transpose(1,2), xv_approx.transpose(1,2)
-            out = F.scaled_dot_product_attention(xq_t, xk_t, xv_t, attn_mask=mask, dropout_p=0.0, is_causal=True)
+            # Fix: No se puede pasar attn_mask e is_causal=True a la vez. 
+            # Como mask ya es causal, ponemos is_causal=False.
+            out = F.scaled_dot_product_attention(xq_t, xk_t, xv_t, attn_mask=mask, dropout_p=0.0, is_causal=False)
 
         out = out.transpose(1,2).contiguous().view(bsz, seqlen, -1)
         return self.wo(out), new_kv

@@ -391,6 +391,12 @@ def main():
     else:
         n_layers_str = f"{getattr(model_args, 'n_pre_layers', 0)}+{getattr(model_args, 'n_core_layers', 0)}+{getattr(model_args, 'n_post_layers', 0)}"
 
+    # Identificar Optimizador
+    opt_name = getattr(args_cli, 'optimizer', 'adamw').upper()
+    if opt_name == 'SWO': opt_name = "SuperMarioOptimizer (SMO)"
+    elif _is_dml: opt_name = "DMLAdamW (DirectML AMD)"
+    else: opt_name = "AdamW (Foreach=False)"
+
     header = f"""========================================
 DATE: {start_date.strftime('%Y-%m-%d %H:%M:%S')}
 DEVICE: {str(device).upper()}
@@ -404,7 +410,13 @@ batch_size: {args_cli.batch_size}
 seq_len: {args_cli.seq_len}
 grad_accum_steps: {args_cli.grad_accum_steps}
 max_iters: {args_cli.max_iters}
-learning_rate: {args_cli.lr}
+learning_rate: {args_cli.lr} (min: {getattr(args_cli, 'min_lr', 'N/A')})
+warmup_iters: {getattr(args_cli, 'warmup_iters', 0)}
+weight_decay: {getattr(args_cli, 'weight_decay', 0.1)}
+grad_clip: {getattr(args_cli, 'grad_clip', 1.0)}
+--------------- OPTIMIZER -------------
+name: {opt_name}
+k_ratio: {getattr(args_cli, 'k_ratio', 0.25) if 'SMO' in opt_name else 'N/A'}
 --------------- MODEL PARAMS ----------
 dim: {model_args.dim}
 n_layers: {n_layers_str}

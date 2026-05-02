@@ -11,6 +11,8 @@ import numpy as np
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from scripts.eval import load_model_and_tokenizer, generate_text
 
+import re
+
 def test_logical_transitivity(model, tokenizer, device):
     """Prueba de transitividad: A es B, B es C -> A es ? (C)"""
     prompts = [
@@ -23,23 +25,28 @@ def test_logical_transitivity(model, tokenizer, device):
     for p in prompts:
         input_ids = tokenizer.encode(p).ids
         gen_ids = generate_text(model, tokenizer, input_ids, max_new_tokens=10, device=device)
-        output = tokenizer.decode(gen_ids[0].tolist())
+        new_ids = gen_ids[0][len(input_ids):].tolist()
+        output = tokenizer.decode(new_ids).lower().strip()
         print(f"Prompt: {p} | Gen: {output}")
-        # Evaluación heurística simple
-        if any(word in output.lower() for word in ["brilla", "alto", "d"]):
+        
+        # Heurística más estricta (palabras completas)
+        if "brilla" in output or "alto" in output:
             correct += 1
+        elif p.endswith("C es") and (output.startswith("d") or " d " in output):
+            correct += 1
+            
     return correct / len(prompts)
 
 def test_pattern_extrapolation(model, tokenizer, device):
     """Prueba de extrapolación: Repetir un patrón más allá de lo visto."""
-    # Patrón: número, palabra, número, palabra...
     prompt = "1 uno 2 dos 3 tres 4 cuatro 5 cinco 6 seis 7 siete 8 ocho 9 nueve 10 diez 11"
     print("\n--- Test 2: Extrapolación de Patrones ---")
     input_ids = tokenizer.encode(prompt).ids
     gen_ids = generate_text(model, tokenizer, input_ids, max_new_tokens=5, device=device)
-    output = tokenizer.decode(gen_ids[0].tolist())
+    new_ids = gen_ids[0][len(input_ids):].tolist()
+    output = tokenizer.decode(new_ids).lower().strip()
     print(f"Prompt: {prompt} | Gen: {output}")
-    return 1.0 if "once" in output.lower() else 0.0
+    return 1.0 if "once" in output else 0.0
 
 def test_cyclic_reasoning(model, tokenizer, device):
     """Prueba de razonamiento cíclico (Módulo V194-V195)."""
@@ -52,9 +59,10 @@ def test_cyclic_reasoning(model, tokenizer, device):
     for p in prompts:
         input_ids = tokenizer.encode(p).ids
         gen_ids = generate_text(model, tokenizer, input_ids, max_new_tokens=5, device=device)
-        output = tokenizer.decode(gen_ids[0].tolist())
+        new_ids = gen_ids[0][len(input_ids):].tolist()
+        output = tokenizer.decode(new_ids).lower().strip()
         print(f"Prompt: {p} | Gen: {output}")
-        if any(word in output.lower() for word in ["lunes", "marzo"]):
+        if "lunes" in output or "marzo" in output:
             correct += 1
     return correct / len(prompts)
 
