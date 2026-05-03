@@ -19,18 +19,19 @@ import torch.nn.functional as F
 
 sys.path.insert(0, '.')
 from model.model_spectral import SpectralThinker, SpectralArgs
+from model.model_spectral_v7 import SpectralThinker as SpectralThinkerV7, SpectralArgs as SpectralArgsV7
 
 # ─── Configuración del benchmark ─────────────────────────────────────────────
-DIM         = 256
+DIM         = 1024
 N_LAYERS    = 6
-N_HEADS     = 8
+N_HEADS     = 16
 N_KV_HEADS  = 4
-VOCAB_SIZE  = 16384
-K           = 64
-BATCH       = 16
-SEQ_LEN     = 256
+VOCAB_SIZE  = 32768
+K           = 128
+BATCH       = 8
+SEQ_LEN     = 512
 N_WARMUP    = 3
-N_MEASURE   = 10
+N_MEASURE   = 5
 DEVICE      = torch.device('cpu')
 
 
@@ -170,7 +171,7 @@ def fmt_mb(b): return '{:.2f}MB'.format(b / 1e6)
 
 def main():
     print('=' * 60)
-    print('EXP-6: SpectralThinker vs Dense — Benchmark')
+    print('EXP-6: SpectralThinker V7 vs Dense — Benchmark')
     print('Batch={}, SeqLen={}, Dim={}, K={}, Layers={}'.format(
         BATCH, SEQ_LEN, DIM, K, N_LAYERS))
     print('Warmup={}, Mediciones={}'.format(N_WARMUP, N_MEASURE))
@@ -181,14 +182,15 @@ def main():
     tokens  = torch.randint(0, VOCAB_SIZE, (BATCH, SEQ_LEN), device=DEVICE)
     targets = torch.randint(0, VOCAB_SIZE, (BATCH, SEQ_LEN), device=DEVICE)
 
-    # ── SpectralThinker ──────────────────────────────────────────────────────
-    print('\n[1/2] Construyendo SpectralThinker Nano (dim={}, k={})...'.format(DIM, K))
-    spec_args = SpectralArgs(
+    # ── SpectralThinker V7 ───────────────────────────────────────────────────
+    print('\n[1/2] Construyendo SpectralThinker V7 (dim={}, k={})...'.format(DIM, K))
+    spec_args = SpectralArgsV7(
         dim=DIM, n_layers=N_LAYERS, n_heads=N_HEADS, n_kv_heads=N_KV_HEADS,
         vocab_size=VOCAB_SIZE, max_seq_len=SEQ_LEN,
-        k_dim_attn=K, k_dim_ffn=K, k_hidden_ffn=K*2
+        k_dim_attn=K, k_dim_ffn=K, k_hidden_ffn=K*2,
+        emb_dim=128, k_vocab=128
     )
-    spectral = SpectralThinker(spec_args).to(DEVICE)
+    spectral = SpectralThinkerV7(spec_args).to(DEVICE)
     spec_params   = sum(p.numel() for p in spectral.parameters())
     spec_proj     = sum(p.numel() for n, p in spectral.named_parameters() if 'core' in n)
     spec_model_mb = param_bytes(spectral)
@@ -241,7 +243,7 @@ def main():
     print('RESULTADOS BENCHMARK')
     print('=' * 60)
 
-    print('\n{:<30} {:>14} {:>14} {:>10}'.format('Metrica', 'SpectralNano', 'Dense', 'Ratio'))
+    print('\n{:<30} {:>14} {:>14} {:>10}'.format('Metrica', 'Spectral V7', 'Dense', 'Ratio'))
     print('-' * 70)
 
     def row(label, sv_raw, dv_raw, sv_fmt, dv_fmt):

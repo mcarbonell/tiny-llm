@@ -38,3 +38,17 @@ Este documento centraliza el plan de ataque del proyecto, basado en los blueprin
   - [x] Desarrollar sistema interactivo que pause la generación de texto al detectar un `<TOOL_CALL>`.
   - [x] Conectar una herramienta real (ej. DuckDuckGo o Wikipedia).
   - [x] Retroalimentar el `<TOOL_RESULT>` al modelo y continuar hasta la respuesta final.
+
+## Fase 4+: Hacia la Arquitectura Cognitiva (TCA)
+Esta fase representa la frontera actual del proyecto, centrada en convertir el LLM en un motor de razonamiento autónomo y modular.
+
+### 📄 Documentación de Investigación (Mayo 2026)
+- [**Research Proposal: TinyThinker Cognitive Architecture**](docs/research/tinythinker_next/research_proposal.md): Propuesta integral de OS Cognitivo con recurrencia y scratchpad mutable.
+- [**Modular Virgin Experts (MVE)**](docs/research/tinythinker_next/modular_virgin_experts_paper.md): Técnica para aprendizaje continuo sin olvido catastrófico mediante slots de expertos reservados.
+- [**The Silent Architect: Philosophical Implications**](docs/research/tinythinker_next/scratchpad_philosophical_implications.md): Ensayo sobre la transición del LLM de Sistema 1 a Sistema 2 mediante pensamiento privado.
+
+### 🧪 Objetivos Técnicos
+- [x] **Estabilización de Spectral V7:** Superado el cuello de botella del vocabulario mediante cabezal factorizado.
+- [ ] **Implementar TCA v2:** Finalizar el prototipo `model_coga_spectral_v2.py` con integración total de herramientas.
+- [ ] **Curriculum de Autocorrección:** Entrenar el modelo para detectar y borrar errores en su propio scratchpad.
+- [ ] **Inferencia Adaptativa:** Perfeccionar el cerebelo espectral para optimizar el budget de tokens internos por tarea.

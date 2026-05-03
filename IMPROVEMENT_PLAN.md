@@ -31,16 +31,17 @@ Objetivo: Reducir las alucinaciones y mejorar la síntesis de información.
 Objetivo: Implementar eficiencia arquitectónica para superar la limitación teórica de parámetros asumiendo el mismo coste computacional.
 
 ### ✅ P0 - Base Arquitectónica COGA (Completado)
-1.  **Modularidad (MoE):** Creada arquitectura de "Expert Slots" (`model_moe.py`) para evitar olvido catastrófico.
-2.  **Memoria de Trabajo:** Implementado RAM editable (`Scratchpad`) sin consumo de contexto (`model_coga.py`).
-3.  **Sabiduría (MemoryBank):** Creada base de datos vectorial nativa para recuperación a largo plazo (`memory.py`).
-4.  **Profundidad Adaptativa:** Implementado bucle Universal Transformer y estimador `Halt Head` para adaptar compute por token.
-5.  **Autonomía:** Desarrollado script de ciclo nocturno para auto-finetuning basado en errores detectados en logs diarios.
+... (anteriormente completado) ...
 
-### P1 - Validación Empírica COGA
-1.  **Entrenamiento MoE Base:** Entrenar MoE y comparar con el baseline denso (actualmente en curso).
-2.  **Validación de Componentes:** Probar empíricamente el Scratchpad, RAG Dinámico y Paro Adaptativo según el plan `docs/COGA_VALIDATION_PLAN.md`.
-3.  **Currículum de Razonamiento:** Reanudar el entrenamiento de las fases lógicas (L2, L3) usando la nueva arquitectura COGA para enseñar al modelo a utilizar `<WRITE>`.
+### ✅ P1 - Validación y Estabilización Spectral V7 (Nuevo)
+1.  **Factorización Exitosa:** Implementación de embeddings factorizados y cabezal vinculado para eliminar el "impuesto al vocabulario".
+2.  **SMO Spectral-Aware:** Refactorización del optimizador para soportar núcleos DCT/Walsh nativos.
+3.  **Estabilización de Init:** Identificación del umbral de inicialización (std=0.02) para modelos de alta dimensión (dim=1024).
+
+### P2 - Arquitectura Avanzada: MoE Espectral
+Objetivo: Combinar la eficiencia de los núcleos espectrales con la capacidad de los Expertos Modulares (MoE).
+1.  **Spectral-MoE:** Implementar capas `WalshLinear` y `DCTLinear` dentro de bloques MoE con Gating Gumbel-Softmax.
+2.  **Currículum de Razonamiento:** Reanudar el entrenamiento de las fases lógicas (L2, L3) usando la nueva arquitectura V7 para enseñar al modelo a utilizar `<WRITE>`.
 
 ### P2 - Refactorización y Soporte
 1.  **Soporte Universal:** Consolidar el entrenamiento (`train.py`) y chat (`chat.py`) para soportar dinámicamente cualquier arquitectura (dense, moe, coga). *(Completado)*

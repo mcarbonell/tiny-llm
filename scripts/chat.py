@@ -272,15 +272,25 @@ def main():
         sys.exit(1)
 
     print(f"Using checkpoint: {os.path.basename(ckpt_path)}")
-    print("Cargando Tokenizador...")
-    tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
-
-    print("Despertando a TinyThinker desde el disco...")
-    torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, AnalogArgs])
+    
+    torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, SpectralArgsV6, SpectralArgsV7, CogaSpectralArgs, AnalogArgs])
     checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
     model_args = checkpoint['args']
     arch = checkpoint.get('arch', 'dense')
+    
+    # Resolver tokenizador dinámicamente
+    tokenizer_path = TOKENIZER_PATH
+    if hasattr(model_args, 'vocab_size') and model_args.vocab_size == 32768:
+        tokenizer_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model", "tokenizer_v2_32k.json")
+    
+    if not os.path.exists(tokenizer_path):
+        print(f"Error: Tokenizer not found at {tokenizer_path}")
+        sys.exit(1)
+        
+    print(f"Cargando Tokenizador: {os.path.basename(tokenizer_path)}...")
+    tokenizer = Tokenizer.from_file(tokenizer_path)
 
+    print("Despertando a TinyThinker desde el disco...")
     if arch == 'dense':
         model = TinyThinker(model_args)
     elif arch == 'moe':
@@ -293,8 +303,14 @@ def main():
         model = SpectralThinkerV4(model_args)
     elif arch == 'spectral_v5':
         model = SpectralThinkerV5(model_args)
+    elif arch == 'spectral_v6':
+        model = SpectralThinkerV6(model_args)
+    elif arch == 'spectral_v7':
+        model = SpectralThinkerV7(model_args)
     elif arch == 'coga_spectral':
         model = TinyThinkerCogaSpectral(model_args)
+    elif arch == 'analog':
+        model = TinyThinkerAnalog(model_args)
     else:
         raise ValueError(f"Arquitectura desconocida en checkpoint: {arch}")
 
@@ -334,10 +350,6 @@ def main():
         except KeyboardInterrupt:
             print("\nSaliendo de la terminal...")
             break
-
-if __name__ == "__main__":
-    main()
-    break
 
 if __name__ == "__main__":
     main()

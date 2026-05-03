@@ -37,5 +37,5 @@ data_path: data/train_v2_32k.bin
 checkpoint_dir: checkpoints/spectral_v7_hd_pure
 tokenizer_path: model/tokenizer_v2_32k.json
 arch: spectral_v7
-optimizer: swo
+optimizer: adamw
 device: cpu

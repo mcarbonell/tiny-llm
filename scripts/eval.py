@@ -68,7 +68,7 @@ def load_model_and_tokenizer(checkpoint_path, device='cpu'):
         raw_bytes = zlib.decompress(compressed_data)
         buffer = io.BytesIO(raw_bytes)
         
-        torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, AnalogArgs, AutoAnalogArgs])
+        torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, SpectralArgsV6, SpectralArgsV7, CogaSpectralArgs, AnalogArgs, AutoAnalogArgs])
         checkpoint = torch.load(buffer, map_location='cpu', weights_only=False)
         
         # 2. Reconstrucción Espectral Inversa
@@ -91,7 +91,7 @@ def load_model_and_tokenizer(checkpoint_path, device='cpu'):
         checkpoint['model'] = reconstructed_state
     else:
         # Carga estándar .pt
-        torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, AnalogArgs, AutoAnalogArgs])
+        torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, SpectralArgsV6, SpectralArgsV7, CogaSpectralArgs, AnalogArgs, AutoAnalogArgs])
         checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
 
     # Usar config del checkpoint
@@ -357,6 +357,12 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
     accuracy = evaluate_tool_calling_accuracy(model, tokenizer, args.dataset, device)
     if accuracy is not None:
         print(f"Tool-calling Accuracy: {accuracy:.2%}")
+    else:
+        print("No se pudo evaluar tool-calling accuracy.")
+
+if __name__ == "__main__":
+    main()
+ol-calling Accuracy: {accuracy:.2%}")
     else:
         print("No se pudo evaluar tool-calling accuracy.")
 
