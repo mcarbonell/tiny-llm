@@ -86,6 +86,47 @@ class Scratchpad(nn.Module):
         # Retorna el banco de memoria expandido para el batch
         return self.slots.unsqueeze(0).expand(x.size(0), -1, -1)
 
+class SpectralCrossAttention(nn.Module):
+    """
+    Cross-Attention para el Scratchpad Mutable con Supresión de Eco (V88).
+    """
+    def __init__(self, args: CogaSpectralArgs):
+        super().__init__()
+        self.n_heads = args.n_heads
+        self.n_kv_heads = args.n_kv_heads
+        self.n_rep = self.n_heads // self.n_kv_heads
+        self.head_dim = args.dim // args.n_heads
+
+        self.wq = DCTLinear(args.dim, args.n_heads * self.head_dim, args.k_dim_attn, args.k_dim_attn)
+        self.wk = DCTLinear(args.dim, self.n_kv_heads * self.head_dim, args.k_dim_attn, args.k_dim_attn)
+        self.wv = DCTLinear(args.dim, self.n_kv_heads * self.head_dim, args.k_dim_attn, args.k_dim_attn)
+        self.wo = DCTLinear(args.n_heads * self.head_dim, args.dim, args.k_dim_attn, args.k_dim_attn)
+
+    def forward(self, query: torch.Tensor, memory: torch.Tensor):
+        bsz, seqlen, _ = query.shape
+        _, mem_len, _ = memory.shape
+        
+        xq = self.wq(query).view(bsz, seqlen, self.n_heads, self.head_dim)
+        xk = self.wk(memory).view(bsz, mem_len, self.n_kv_heads, self.head_dim)
+        xv = self.wv(memory).view(bsz, mem_len, self.n_kv_heads, self.head_dim)
+        
+        if self.n_rep > 1:
+            xk = xk[:, :, :, None, :].expand(bsz, mem_len, self.n_kv_heads, self.n_rep, self.head_dim).flatten(2, 3)
+            xv = xv[:, :, :, None, :].expand(bsz, mem_len, self.n_kv_heads, self.n_rep, self.head_dim).flatten(2, 3)
+
+        # Cross attention estándar (sin RoPE y sin máscara causal)
+        out = F.scaled_dot_product_attention(xq.transpose(1, 2), xk.transpose(1, 2), xv.transpose(1, 2))
+        out = out.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
+        out_proj = self.wo(out)
+        
+        # SUPRESIÓN DE ECO HOLOGRÁFICO (Basado en Findings V88)
+        # Filtra la información redundante devolviendo solo lo ortogonal a la query
+        q_norm = F.normalize(query, p=2, dim=-1)
+        echo_amplitude = (out_proj * q_norm).sum(dim=-1, keepdim=True)
+        out_suppressed = out_proj - (echo_amplitude * q_norm)
+        
+        return out_suppressed
+
 class CogaCoreBlock(nn.Module):
     def __init__(self, args: CogaSpectralArgs):
         super().__init__()
@@ -94,8 +135,8 @@ class CogaCoreBlock(nn.Module):
         self.norm1 = RMSNorm(args.dim, eps=args.norm_eps)
         self.norm2 = RMSNorm(args.dim, eps=args.norm_eps)
         
-        # Cross-Attention al Scratchpad
-        self.cross_attn = SpectralAttention(args) # Reutilizamos SpectralAttention para cross
+        # Cross-Attention al Scratchpad (Working Memory)
+        self.cross_attn = SpectralCrossAttention(args)
         self.norm_cross = RMSNorm(args.dim, eps=args.norm_eps)
         
     def forward(self, x, freqs_cis, mask, memory):
@@ -103,8 +144,8 @@ class CogaCoreBlock(nn.Module):
         h_attn, _ = self.attention(self.norm1(x), freqs_cis, mask)
         h = x + h_attn
         
-        # 2. Cross-Atención al Scratchpad (Working Memory)
-        h_mem, _ = self.cross_attn(self.norm_cross(h), None, None, past_kv=None) # Simplificado
+        # 2. Cross-Atención al Scratchpad (Working Memory) con Supresión de Eco
+        h_mem = self.cross_attn(self.norm_cross(h), memory)
         h = h + h_mem
         
         # 3. FFN (MoE)

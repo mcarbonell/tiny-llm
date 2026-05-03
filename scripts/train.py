@@ -311,16 +311,42 @@ def main():
         else:
             for layer in model.layers: layer.use_checkpoint = True
 
-    # En DirectML, foreach=True (por defecto) causa fallback a CPU y NaNs.
+    # ----------------------------------
+    # Helper: Optimizador con Weight Decay Selectivo
+    # ----------------------------------
+    def create_optimizer(model_obj, lr, weight_decay, opt_type):
+        decay_params = []
+        no_decay_params = []
+        for n, p in model_obj.named_parameters():
+            if not p.requires_grad:
+                continue
+            # La intuición es correcta: penalizar coeficientes espectrales (core) destruye la señal
+            # ya que son frecuencias puras comprimidas, no pesos densos redundantes.
+            if 'core' in n or 'bias' in n or 'norm' in n or p.ndim < 2:
+                no_decay_params.append(p)
+            else:
+                decay_params.append(p)
+                
+        optim_groups = [
+            {'params': decay_params, 'weight_decay': weight_decay},
+            {'params': no_decay_params, 'weight_decay': 0.0}
+        ]
+        
+        if opt_type == 'swo':
+            return SuperMarioOptimizer(optim_groups, lr=lr, k_ratio=0.25)
+        elif _is_dml:
+            return DMLAdamW(optim_groups, lr=lr)
+        else:
+            return torch.optim.AdamW(optim_groups, lr=lr, foreach=False)
+
     weight_decay = getattr(args_cli, 'weight_decay', 0.1)
+    
     if args_cli.optimizer == 'swo':
         print("[Optimizador] Usando SMO (SuperMarioOptimizer) - Compresión de estado al 93% (K=0.25)")
-        optimizer = SuperMarioOptimizer(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay, k_ratio=0.25)
     elif _is_dml:
         print("[Optimizador] Usando DMLAdamW personalizado sin 'lerp_' para máxima compatibilidad con AMD")
-        optimizer = DMLAdamW(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay)
-    else:
-        optimizer = torch.optim.AdamW(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay, foreach=False)
+        
+    optimizer = create_optimizer(model, args_cli.lr, weight_decay, args_cli.optimizer)
     
     iter_num = 0
     best_val_loss = 1e9
@@ -485,12 +511,7 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
                 model.to(device)
 
                 # Reinstanciar optimizador para capturar solo los nuevos parámetros (grad=True)
-                if args_cli.optimizer == 'swo':
-                    optimizer = SuperMarioOptimizer(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay, k_ratio=0.25)
-                elif _is_dml:
-                    optimizer = DMLAdamW(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay)
-                else:
-                    optimizer = torch.optim.AdamW(model.parameters(), lr=args_cli.lr, weight_decay=weight_decay, foreach=False)
+                optimizer = create_optimizer(model, args_cli.lr, weight_decay, args_cli.optimizer)
 
                 plateau_counter = 0
                 best_val_loss = losses['val'] # Reset baseline para la nueva capa especializados
