@@ -1,0 +1,36 @@
+# =====================================================================
+# SpectralThinker V8 — The Holographic MoE Thinker
+# Objetivo: Validar Memoria O(1) y 131k expertos en lenguaje real.
+# Uso:
+#   python scripts/train.py --config configs/train_spectral_v8_holographic.yaml --arch spectral_v8 --device cpu
+# =====================================================================
+
+# --- Dimensiones base ---
+dim: 1024
+emb_dim: 128
+n_layers: 6
+vocab_size: 32768
+max_seq_len: 1024
+
+# --- Parámetros MoE (Cerebro Masivo) ---
+num_experts: 131072
+top_k: 16
+
+# --- Entrenamiento ---
+batch_size: 4
+seq_len: 512
+grad_accum_steps: 8
+max_iters: 10000
+learning_rate: 0.001
+min_lr: 0.00001
+warmup_iters: 500
+eval_interval: 250
+eval_iters: 20
+weight_decay: 0.1
+grad_clip: 1.0
+use_gradient_checkpointing: false
+
+# --- Rutas ---
+data_path: data/train_v2_32k.bin
+checkpoint_dir: checkpoints/spectral_v8_holographic
+tokenizer_path: model/tokenizer_v2_32k.json

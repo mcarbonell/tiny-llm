@@ -20,6 +20,8 @@ from model.model_spectral_v4 import SpectralThinker as SpectralThinkerV4, Spectr
 from model.model_spectral_v5 import SpectralThinker as SpectralThinkerV5, SpectralArgs as SpectralArgsV5
 from model.model_spectral_v6 import SpectralThinker as SpectralThinkerV6, SpectralArgs as SpectralArgsV6
 from model.model_spectral_v7 import SpectralThinker as SpectralThinkerV7, SpectralArgs as SpectralArgsV7
+from model.model_spectral_v8 import SpectralThinkerV8, SpectralArgs as SpectralArgsV8
+from model.model_spectral_v8_1 import SpectralThinkerV8_1, SpectralArgs as SpectralArgsV8_1
 from model.model_coga_spectral import TinyThinkerCogaSpectral, CogaSpectralArgs
 from model.model_analog import TinyThinkerAnalog, AnalogArgs
 from model.model_auto_architect import TinyThinkerAutoArchitect, AutoArchitectArgs
@@ -45,7 +47,7 @@ import yaml
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyThinker Pretrain — Versión Optimizada")
     parser.add_argument('--config', type=str, default=None, help='Ruta al config YAML. Sobreescribe otros argumentos.')
-    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'spectral_v7', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog'], help='Arquitectura a entrenar.')
+    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'spectral_v7', 'spectral_v8', 'spectral_v8_1', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog'], help='Arquitectura a entrenar.')
     parser.add_argument('--optimizer', type=str, default='adamw', choices=['adamw', 'swo'], help='Optimizador a utilizar.')
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'dml', 'mps'], help='Dispositivo de entrenamiento.')
     parser.add_argument('--resume', action='store_true', help='Reanudar desde el último checkpoint.')
@@ -189,10 +191,11 @@ def main():
     # ----------------------------------
     # 3. Inicialización del Modelo
     # ----------------------------------
-    out_dir = getattr(args_cli, 'checkpoint_dir', "checkpoints")
-    os.makedirs(out_dir, exist_ok=True)
-    
     arch = getattr(args_cli, 'arch', 'dense')
+    
+    # SEGURIDAD: Si no hay directorio específico, usamos uno basado en la arquitectura
+    out_dir = getattr(args_cli, 'checkpoint_dir', os.path.join("checkpoints", arch))
+    os.makedirs(out_dir, exist_ok=True)
     
     common_args = {
         'dim': getattr(args_cli, 'dim', 256),
@@ -266,6 +269,21 @@ def main():
         spectral_args['k_seq_len']    = getattr(args_cli, 'k_seq_len',    64)
         model_args = SpectralArgsV7(**spectral_args)
         model = SpectralThinkerV7(model_args)
+    elif arch == 'spectral_v8':
+        spectral_args = common_args.copy()
+        spectral_args['emb_dim']      = getattr(args_cli, 'emb_dim',     128)
+        spectral_args['num_experts']  = getattr(args_cli, 'num_experts', 131072)
+        spectral_args['top_k']        = getattr(args_cli, 'top_k',       16)
+        model_args = SpectralArgsV8(**spectral_args)
+        model = SpectralThinkerV8(model_args)
+    elif arch == 'spectral_v8_1':
+        spectral_args = common_args.copy()
+        spectral_args['emb_dim']      = getattr(args_cli, 'emb_dim',     128)
+        spectral_args['num_experts']  = getattr(args_cli, 'num_experts', 131072)
+        spectral_args['top_k']        = getattr(args_cli, 'top_k',       16)
+        spectral_args['k_dim']        = getattr(args_cli, 'k_dim',       128)
+        model_args = SpectralArgsV8_1(**spectral_args)
+        model = SpectralThinkerV8_1(model_args)
     elif arch == 'coga_spectral':
         coga_spec_args = common_args.copy()
         coga_spec_args.pop('n_layers', None)
@@ -320,9 +338,10 @@ def main():
         for n, p in model_obj.named_parameters():
             if not p.requires_grad:
                 continue
-            # La intuición es correcta: penalizar coeficientes espectrales (core) destruye la señal
-            # ya que son frecuencias puras comprimidas, no pesos densos redundantes.
-            if 'core' in n or 'bias' in n or 'norm' in n or p.ndim < 2:
+            if not p.requires_grad: continue
+            
+            # Excluimos bias, normas y parámetros del dominio espectral (signatures, weights, basis)
+            if p.dim() < 2 or any(x in n for x in ['signatures', 'weights', 'basis', 'norm']):
                 no_decay_params.append(p)
             else:
                 decay_params.append(p)

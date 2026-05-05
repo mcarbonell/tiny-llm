@@ -1,6 +1,11 @@
 # 🗺️ Roadmap: TinyThinker (LLM Lógico Minimalista)
 
-Este documento centraliza el plan de ataque del proyecto, basado en los blueprints iniciales. Permite llevar un track de nuestro progreso.
+> **Filosofía del Viaje:** TinyThinker es la culminación de una espiral evolutiva que comenzó con **SOMA** (gestión soberana de contexto), se estructuró en **COGA** (arquitectura de sistema operativo cognitivo) y se refinó atómicamente con **Attention Neuron** (síntesis espectral y memoria holográfica). Este Roadmap traza el camino hacia un Agente Soberano Total.
+
+## Fase 0: El Legado Genético
+- [x] **SOMA (Macro):** Validación de la gestión de contexto soberana y "The Bitter Lesson".
+- [x] **COGA (Sistema):** Implementación del Scratchpad y bucle recurrente inicial.
+- [x] **Attention Neuron (Átomo):** Descubrimiento de núcleos Matrix-Free y el Hipocampo Holográfico.
 
 ## Fase 1: Adquisición del Lenguaje (Pre-training)
 - [x] **1.1. Setup Inicial:**

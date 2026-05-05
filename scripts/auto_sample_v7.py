@@ -8,6 +8,12 @@ import torch.nn.functional as F
 sys.path.append(os.getcwd())
 from model.model_spectral_v7 import SpectralThinker, SpectralArgs
 
+def safe_print(text):
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode('ascii', errors='replace').decode('ascii'))
+
 def generate(model, tokenizer, prompt, max_new_tokens=50, temperature=0.8, device='cpu'):
     model.eval()
     tokens = tokenizer.encode(prompt).ids
@@ -36,10 +42,10 @@ def main():
         print(f"❌ Checkpoint no encontrado: {checkpoint_path}")
         return
 
-    print(f"📖 Cargando tokenizer: {tokenizer_path}")
+    print(f"LOAD: Tokenizer {tokenizer_path}")
     tokenizer = Tokenizer.from_file(tokenizer_path)
     
-    print(f"🧠 Cargando modelo desde: {checkpoint_path}")
+    print(f"LOAD: Modelo {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     args = checkpoint['args']
     model = SpectralThinker(args)
@@ -58,10 +64,10 @@ def main():
     print("="*50)
     
     for p in prompts:
-        print(f"\nPROMPT: {p}")
+        safe_print(f"\nPROMPT: {p}")
         completion = generate(model, tokenizer, p, max_new_tokens=40)
-        print(f"GEN: {completion}")
-        print("-" * 30)
+        safe_print(f"GEN: {completion}")
+        safe_print("-" * 30)
 
 if __name__ == "__main__":
     main()
