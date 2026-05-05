@@ -386,7 +386,11 @@ def main():
             checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
             model.load_state_dict(checkpoint['model'])
 
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            try:
+                optimizer.load_state_dict(checkpoint['optimizer'])
+            except Exception:
+                print("[Resume] Aviso: Reiniciando estados del optimizador por cambio de configuración de grupos de parámetros.")
+                
             iter_num = checkpoint['iter_num']
             best_val_loss = checkpoint.get('val_loss', 1e9)
             print(f"[Resume] Continuando desde la iteración {iter_num} (Pérdida previa: {best_val_loss:.4f})")
@@ -508,7 +512,7 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
 
             checkpoint = {
                 'model': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
+                # 'optimizer': optimizer.state_dict(),
                 'iter_num': iter_num,
                 'args': model_args,
                 'arch': arch,
