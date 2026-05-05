@@ -1,0 +1,36 @@
+# =====================================================================
+# SpectralThinker V8.2 — The Saliency-Gated Holographic MoE
+# Objetivo: 131k expertos + Memoria Holográfica con filtrado dinámico.
+# Uso:
+#   python scripts/train.py --config configs/train_spectral_v8_2_saliency.yaml --arch spectral_v8_2 --device dml
+# =====================================================================
+
+# --- Dimensiones base ---
+dim: 1024
+emb_dim: 128
+n_layers: 6
+vocab_size: 32768
+max_seq_len: 4096  # Aumentamos el límite de secuencia gracias a la saliencia
+
+# --- Parámetros MoE Comprimido ---
+num_experts: 131072
+top_k: 16
+k_dim: 128
+
+# --- Entrenamiento ---
+batch_size: 2      # Bajamos batch para compensar el aumento de seq_len
+seq_len: 2048      # Entrenamos con contextos más largos
+grad_accum_steps: 16
+max_iters: 15000
+learning_rate: 0.0008
+min_lr: 0.00001
+warmup_iters: 800
+eval_interval: 200
+eval_iters: 30
+weight_decay: 0.1
+grad_clip: 1.0
+
+# --- Rutas ---
+data_path: data/train_v2_32k.bin
+checkpoint_dir: checkpoints/spectral_v8_2_saliency
+tokenizer_path: model/tokenizer_v2_32k.json

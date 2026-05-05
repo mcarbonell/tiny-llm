@@ -1,0 +1,35 @@
+# =====================================================================
+# SpectralThinker V8.3-Deep — The Zero Gravity Brain-Only Model
+# Objetivo: 32k Dimensión, 16 Capas, 100% Matrix-Free.
+# Uso:
+#   python scripts/train.py --config configs/train_spectral_v8_3_deep.yaml --arch spectral_v8_3_matrix_free --device cpu
+# =====================================================================
+
+# --- Dimensiones Base (Configuración Ganadora) ---
+dim: 32768
+emb_dim: 128     # Compresión Espectral JPEG
+n_layers: 16
+vocab_size: 32768
+max_seq_len: 4096
+
+# --- Parámetros MoE Matrix-Free ---
+num_experts: 128
+top_k: 8
+
+# --- Entrenamiento ---
+batch_size: 1      # Dim: 32k consume mucha activación, usamos batch 1
+seq_len: 1024      # Empezamos con 1024 para estabilidad
+grad_accum_steps: 32
+max_iters: 20000
+learning_rate: 0.0005
+min_lr: 0.00001
+warmup_iters: 1000
+eval_interval: 250
+eval_iters: 20
+weight_decay: 0.1
+grad_clip: 1.0
+
+# --- Rutas ---
+data_path: data/train_v2_32k.bin
+checkpoint_dir: checkpoints/spectral_v8_3_deep
+tokenizer_path: model/tokenizer_v2_32k.json
