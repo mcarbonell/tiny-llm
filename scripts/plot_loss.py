@@ -20,13 +20,32 @@ def parse_log(log_path):
     val_train_losses = []
     val_losses = []
     
+    metadata = {}
+    
     # Expresiones regulares para capturar las métricas
     step_pattern = re.compile(r"iter\s+(\d+)\s+\|\s+loss\s+([0-9.]+)")
     val_pattern = re.compile(r"Iter\s+(\d+):\s+train_loss\s+([0-9.]+),\s+val_loss\s+([0-9.]+)")
     
+    # Patrones para metadatos
+    meta_patterns = {
+        'model': re.compile(r"model_file:\s+(.+)"),
+        'lr': re.compile(r"learning_rate:\s+([0-9.]+)"),
+        'dim': re.compile(r"dim:\s+(\d+)"),
+        'layers': re.compile(r"n_layers:\s+(\d+)"),
+        'params': re.compile(r"TOTAL PARAMS:\s+(.+)"),
+        'batch': re.compile(r"batch_size:\s+(\d+)")
+    }
+    
     try:
         with open(log_path, 'r', encoding='utf-8') as f:
             for line in f:
+                # Extraer metadatos del header (primeras líneas)
+                for key, pattern in meta_patterns.items():
+                    if key not in metadata:
+                        match = pattern.search(line)
+                        if match:
+                            metadata[key] = match.group(1).strip()
+
                 # Buscar métricas de cada step
                 step_match = step_pattern.search(line)
                 if step_match:
@@ -43,16 +62,16 @@ def parse_log(log_path):
     except Exception as e:
         print(f"❌ Error al leer el archivo {log_path}: {e}")
                 
-    return iters, losses, val_iters, val_train_losses, val_losses
+    return iters, losses, val_iters, val_train_losses, val_losses, metadata
 
 def plot_log(log_path):
-    iters, losses, val_iters, val_train_losses, val_losses = parse_log(log_path)
+    iters, losses, val_iters, val_train_losses, val_losses, metadata = parse_log(log_path)
     
     if not iters and not val_iters:
         print(f"⚠️ No se encontraron datos de pérdida válidos en {log_path}")
         return
         
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(12, 7))
     
     # Dibujar la línea de loss por cada step (suele tener ruido, la hacemos más tenue)
     if iters:
@@ -67,6 +86,19 @@ def plot_log(log_path):
     plt.xlabel('Iteraciones', fontsize=12)
     plt.ylabel('Pérdida (Cross-Entropy Loss)', fontsize=12)
     
+    # Añadir cuadro de metadatos si existen
+    if metadata:
+        info_text = (
+            f"Modelo: {metadata.get('model', 'N/A')}\n"
+            f"Params: {metadata.get('params', 'N/A')}\n"
+            f"Config: Dim {metadata.get('dim')}, {metadata.get('layers')} layers\n"
+            f"LR: {metadata.get('lr')}, Batch: {metadata.get('batch')}"
+        )
+        # Posicionamos el cuadro en la esquina superior derecha
+        plt.text(0.98, 0.85, info_text, transform=plt.gca().transAxes, 
+                 fontsize=10, verticalalignment='top', horizontalalignment='right',
+                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
+
     # Escala logarítmica si los valores iniciales son muy altos (>100) para no aplastar la gráfica
     if losses and max(losses) > 20:
         plt.yscale('log')

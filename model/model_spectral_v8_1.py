@@ -28,7 +28,12 @@ class SpectralArgs:
     max_seq_len: int = 1024
 
 # --- TRANSFORMADA RÁPIDA ---
-def fwht(x):
+try:
+    from kernels.fwht_op import fwht_native
+except ImportError:
+    fwht_native = None
+
+def fwht_iterative(x):
     b, n = x.shape
     res = x.clone()
     h = 1
@@ -38,6 +43,20 @@ def fwht(x):
         res = torch.cat([a + b_, a - b_], dim=2)
         h *= 2
     return res.view(b, n) / (n ** 0.5)
+
+def fwht(x):
+    orig_shape = x.shape
+    if len(orig_shape) > 2:
+        x_flat = x.reshape(-1, orig_shape[-1])
+    else:
+        x_flat = x
+        
+    if fwht_native is not None and x.device.type == 'cpu':
+        res = fwht_native(x_flat)
+        if res is not None:
+            return res.view(orig_shape)
+            
+    return fwht_iterative(x_flat).view(orig_shape)
 
 class RMSNorm(nn.Module):
     def __init__(self, dim, eps=1e-6):

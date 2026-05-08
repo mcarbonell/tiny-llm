@@ -48,35 +48,67 @@ def fwht_gpu_vectorized(x):
         
     return x.view(orig_shape) / (n ** 0.5)
 
+try:
+    from kernels.fwht_op import fwht_native
+except ImportError:
+    fwht_native = None
+
+class FastUniversalFWHT(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x):
+        orig_shape = x.shape
+        x_flat = x.view(-1, orig_shape[-1])
+        device = x.device
+        
+        # Offload a CPU para el kernel ultrarrápido si está disponible
+        if fwht_native is not None:
+            x_cpu = x_flat.cpu() if device.type != 'cpu' else x_flat.clone()
+            res = fwht_native(x_cpu)
+            if res is not None:
+                return res.to(device).view(orig_shape)
+                
+        # Fallback a vectorizado si no hay kernel
+        if device.type != 'cpu':
+            return fwht_gpu_vectorized(x)
+        return fwht_cpu_best(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        orig_shape = grad_output.shape
+        grad_flat = grad_output.view(-1, orig_shape[-1])
+        device = grad_output.device
+        
+        if fwht_native is not None:
+            grad_cpu = grad_flat.cpu() if device.type != 'cpu' else grad_flat.clone()
+            res = fwht_native(grad_cpu)
+            if res is not None:
+                return res.to(device).view(orig_shape)
+                
+        if device.type != 'cpu':
+            return fwht_gpu_vectorized(grad_output)
+        return fwht_cpu_best(grad_output)
+
 def fwht_universal(x):
     """Selecciona el motor de FWHT según el dispositivo del tensor."""
-    if x.is_cuda or (HAS_DML and "privateuseone" in str(x.device)):
-        return fwht_gpu_vectorized(x)
-    return fwht_cpu_best(x)
+    return FastUniversalFWHT.apply(x)
 
 class SpectralThinkerV8_6(SpectralThinkerV8_5):
     """
     Extiende la V8.5 con soporte universal de aceleración.
     """
-    def __init__(self, args: SpectralArgs):
-        super().__init__(args)
-        self._current_device = torch.device("cpu")
-
-    def to_device(self, device=None):
-        if device is None:
-            device = get_best_device()
-        self._current_device = device
-        self.to(device)
-        print(f"Modelo V8.6 movido a: {device}")
-        return self
-
     def forward(self, tokens, targets=None, holograms=None, pos=0, use_cache=False):
         # Asegurar que los tokens están en el dispositivo correcto
-        if tokens.device != self._current_device:
-            tokens = tokens.to(self._current_device)
+        device = self.codes.device
+        if tokens.device != device:
+            tokens = tokens.to(device)
             
         # 1. Entrada: Espacial -> Espectral
-        z = F.embedding(tokens, self.codes)
+        try:
+            z = F.embedding(tokens, self.codes)
+        except Exception as e:
+            print(f"DEBUG - tokens device: {tokens.device}, type: {type(tokens)}, dtype: {tokens.dtype}")
+            print(f"DEBUG - codes device: {self.codes.device}, type: {type(self.codes)}, dtype: {self.codes.dtype}")
+            raise e
         h_spatial = torch.matmul(z, self.basis)
         h_spec = fwht_universal(h_spatial)
         
@@ -84,8 +116,12 @@ class SpectralThinkerV8_6(SpectralThinkerV8_5):
         new_holograms = []
         for i, layer in enumerate(self.layers):
             prev_h = holograms[i] if holograms is not None else None
-            # Las capas heredan el dispositivo del modelo
-            h_spec, new_h = layer(h_spec, prev_h, pos)
+            # Soporte para gradient checkpointing
+            if getattr(layer, 'use_checkpoint', False) and self.training:
+                # torch.utils.checkpoint no soporta kwargs en todas las versiones, pasamos 'pos' como posicional
+                h_spec, new_h = torch.utils.checkpoint.checkpoint(layer, h_spec, prev_h, pos, use_reentrant=False)
+            else:
+                h_spec, new_h = layer(h_spec, prev_h, pos)
             new_holograms.append(new_h)
             
         # 3. Salida: Espectral -> Espacial
@@ -97,8 +133,8 @@ class SpectralThinkerV8_6(SpectralThinkerV8_5):
         logits = torch.matmul(latent_h, self.codes.t())
         
         if targets is not None:
-            if targets.device != self._current_device:
-                targets = targets.to(self._current_device)
+            if targets.device != device:
+                targets = targets.to(device)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
             return logits, loss
             

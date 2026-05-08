@@ -1,0 +1,37 @@
+# =====================================================================
+# SpectralThinker V8.6 — The Universal Core
+# Objetivo: Residencia Espectral 100% y aceleración JIT/DirectML/CUDA.
+# Uso:
+#   python scripts/train.py --config configs/train_spectral_v8_6_universal.yaml --arch spectral_v8_6 --device cpu
+# =====================================================================
+
+# --- Dimensiones base ---
+dim: 32768
+emb_dim: 128
+n_layers: 16
+vocab_size: 32768
+max_seq_len: 4096
+
+# --- Parámetros MoE Espectral ---
+num_experts: 128
+top_k: 8
+
+# --- Entrenamiento ---
+batch_size: 4
+seq_len: 512
+grad_accum_steps: 8
+max_iters: 10000
+learning_rate: 0.001
+min_lr: 0.00001
+warmup_iters: 500
+eval_interval: 250
+eval_iters: 2
+# Las redes espectrales ignoran este parámetro, pero lo ponemos a 0.0 por claridad
+weight_decay: 0.0
+grad_clip: 1.0
+use_gradient_checkpointing: true
+
+# --- Rutas ---
+data_path: data/train_v2_32k.bin
+checkpoint_dir: checkpoints/spectral_v8_6_universal
+tokenizer_path: model/tokenizer_v2_32k.json

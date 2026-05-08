@@ -85,11 +85,15 @@ class ResonantSpectralMoE_v84(nn.Module):
         scores, indices = torch.topk(logits, self.top_k, dim=1)
         weights = F.softmax(scores * 5.0, dim=1)
         
-        out_spec = torch.zeros_like(x_flat)
-        for k in range(self.top_k):
-            idx = indices[:, k]
-            w = weights[:, k].unsqueeze(-1)
-            out_spec += w * (x_flat * self.expert_filters[idx])
+        # Selección de filtros vectorizada
+        # expert_filters: (NumExperts, Dim) -> selected: (BT, TopK, Dim)
+        selected_filters = self.expert_filters[indices]
+        
+        # Promedio ponderado de los filtros de los expertos: (BT, TopK, Dim) * (BT, TopK, 1) -> sum(dim=1) -> (BT, Dim)
+        res_filter = (selected_filters * weights.unsqueeze(-1)).sum(dim=1)
+        
+        # Aplicación del filtro diagonal final
+        out_spec = x_flat * res_filter
             
         return out_spec.view(b, t, d)
 

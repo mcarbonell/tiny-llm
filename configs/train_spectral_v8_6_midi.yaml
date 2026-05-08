@@ -1,0 +1,34 @@
+# =====================================================================
+# SpectralThinker V8.6 — The MIDI Universal Core
+# Objetivo: Alta densidad espectral manejable en iGPUs (780M).
+# =====================================================================
+
+# --- Dimensiones equilibradas ---
+dim: 4096
+emb_dim: 128
+n_layers: 12
+vocab_size: 32768
+max_seq_len: 1024
+
+# --- Parámetros MoE Espectral ---
+num_experts: 128
+top_k: 8
+
+# --- Entrenamiento ---
+batch_size: 32
+seq_len: 256
+grad_accum_steps: 2
+max_iters: 10000
+learning_rate: 0.001
+min_lr: 0.00001
+warmup_iters: 500
+eval_interval: 250
+eval_iters: 2
+weight_decay: 0.0
+grad_clip: 1.0
+use_gradient_checkpointing: true
+
+# --- Rutas ---
+data_path: data/train_v2_32k.bin
+checkpoint_dir: checkpoints/spectral_v8_6_midi
+tokenizer_path: model/tokenizer_v2_32k.json

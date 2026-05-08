@@ -22,6 +22,9 @@ from model.model_spectral_v6 import SpectralThinker as SpectralThinkerV6, Spectr
 from model.model_spectral_v7 import SpectralThinker as SpectralThinkerV7, SpectralArgs as SpectralArgsV7
 from model.model_spectral_v8 import SpectralThinkerV8, SpectralArgs as SpectralArgsV8
 from model.model_spectral_v8_1 import SpectralThinkerV8_1, SpectralArgs as SpectralArgsV8_1
+from model.model_spectral_v8_4_optimized import SpectralThinkerV8_4, SpectralArgs as SpectralArgsV8_4
+from model.model_spectral_v8_5_native import SpectralThinkerV8_5, SpectralArgs as SpectralArgsV8_5
+from model.model_spectral_v8_6_universal import SpectralThinkerV8_6, SpectralArgs as SpectralArgsV8_6
 from model.model_coga_spectral import TinyThinkerCogaSpectral, CogaSpectralArgs
 from model.model_analog import TinyThinkerAnalog, AnalogArgs
 from model.model_auto_architect import TinyThinkerAutoArchitect, AutoArchitectArgs
@@ -47,7 +50,7 @@ import yaml
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyThinker Pretrain — Versión Optimizada")
     parser.add_argument('--config', type=str, default=None, help='Ruta al config YAML. Sobreescribe otros argumentos.')
-    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'spectral_v7', 'spectral_v8', 'spectral_v8_1', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog'], help='Arquitectura a entrenar.')
+    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'spectral_v7', 'spectral_v8', 'spectral_v8_1', 'spectral_v8_4', 'spectral_v8_5', 'spectral_v8_6', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog'], help='Arquitectura a entrenar.')
     parser.add_argument('--optimizer', type=str, default='adamw', choices=['adamw', 'swo'], help='Optimizador a utilizar.')
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'dml', 'mps'], help='Dispositivo de entrenamiento.')
     parser.add_argument('--resume', action='store_true', help='Reanudar desde el último checkpoint.')
@@ -197,6 +200,23 @@ def main():
     out_dir = getattr(args_cli, 'checkpoint_dir', os.path.join("checkpoints", arch))
     os.makedirs(out_dir, exist_ok=True)
     
+    # PROTECCIÓN CONTRA SOBREESCRITURA
+    if not args_cli.resume:
+        latest_path = os.path.join(out_dir, 'ckpt_pretrain_latest.pt')
+        best_path = os.path.join(out_dir, 'ckpt_pretrain_best.pt')
+        if os.path.exists(latest_path) or os.path.exists(best_path):
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            print(f"\n[!] AVISO: Se detectaron checkpoints existentes en {out_dir}")
+            print(f"    Si querías continuar el entrenamiento, usa el flag --resume")
+            print(f"    Para proteger tus datos, se renombrarán los archivos antiguos con el sufijo _{timestamp}")
+            
+            for path in [latest_path, best_path]:
+                if os.path.exists(path):
+                    new_path = path.replace('.pt', f'_{timestamp}.pt')
+                    os.rename(path, new_path)
+                    print(f"    Renombrado: {os.path.basename(path)} -> {os.path.basename(new_path)}")
+            print("")
+    
     common_args = {
         'dim': getattr(args_cli, 'dim', 256),
         'n_layers': getattr(args_cli, 'n_layers', 6),
@@ -284,6 +304,23 @@ def main():
         spectral_args['k_dim']        = getattr(args_cli, 'k_dim',       128)
         model_args = SpectralArgsV8_1(**spectral_args)
         model = SpectralThinkerV8_1(model_args)
+    elif arch in ('spectral_v8_4', 'spectral_v8_5', 'spectral_v8_6'):
+        spectral_args = common_args.copy()
+        spectral_args.pop('n_heads', None)
+        spectral_args.pop('n_kv_heads', None)
+        spectral_args['emb_dim']      = getattr(args_cli, 'emb_dim',     128)
+        spectral_args['num_experts']  = getattr(args_cli, 'num_experts', 128)
+        spectral_args['top_k']        = getattr(args_cli, 'top_k',       8)
+        
+        if arch == 'spectral_v8_4':
+            model_args = SpectralArgsV8_4(**spectral_args)
+            model = SpectralThinkerV8_4(model_args)
+        elif arch == 'spectral_v8_5':
+            model_args = SpectralArgsV8_5(**spectral_args)
+            model = SpectralThinkerV8_5(model_args)
+        elif arch == 'spectral_v8_6':
+            model_args = SpectralArgsV8_6(**spectral_args)
+            model = SpectralThinkerV8_6(model_args)
     elif arch == 'coga_spectral':
         coga_spec_args = common_args.copy()
         coga_spec_args.pop('n_layers', None)
@@ -359,6 +396,9 @@ def main():
             return torch.optim.AdamW(optim_groups, lr=lr, foreach=False)
 
     weight_decay = getattr(args_cli, 'weight_decay', 0.1)
+    if 'spectral' in arch:
+        print("[Optimizador] Arquitectura espectral detectada. Forzando weight_decay = 0.0")
+        weight_decay = 0.0
     
     if args_cli.optimizer == 'swo':
         print("[Optimizador] Usando SMO (SuperMarioOptimizer) - Compresión de estado al 93% (K=0.25)")
@@ -382,7 +422,7 @@ def main():
         if os.path.exists(ckpt_path):
             print(f"[Resume] Cargando progreso desde {ckpt_path}...")
             # En PyTorch 2.6 we need to allowlist our custom classes
-            torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs])
+            torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, SpectralArgsV8_4, SpectralArgsV8_5, SpectralArgsV8_6])
             checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
             model.load_state_dict(checkpoint['model'])
 
@@ -445,7 +485,7 @@ def main():
             elapsed_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
             
         full_msg = f"[{elapsed_str}] {msg}"
-        print(full_msg)
+        print(full_msg, flush=True)
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(full_msg + "\n")
 
@@ -489,7 +529,7 @@ k_ratio: {getattr(args_cli, 'k_ratio', 0.25) if 'SMO' in opt_name else 'N/A'}
 --------------- MODEL PARAMS ----------
 dim: {model_args.dim}
 n_layers: {n_layers_str}
-n_heads: {model_args.n_heads}
+n_heads: {getattr(model_args, 'n_heads', 'N/A')}
 vocab_size: {model_args.vocab_size}
 TOTAL PARAMS: {total_params / 1e6:.2f}M
 ========================================"""

@@ -39,3 +39,4 @@ Toda nueva tarea o fase debe seguir estrictamente este flujo:
 *   **Tiempos:** Segundos (`s`) con dos decimales.
 *   **Pérdida:** Cuatro decimales.
 *   **Learning Rate:** Notación científica (`1.00e-04`).
+*   **Weight Decay:** Las redes espectrales (arquitecturas que operan en el dominio de Walsh-Hadamard o similares) NO deben usar weight decay (`weight_decay = 0.0`), ya que este mecanismo está pensado para regularizar redes densas tradicionales y degrada los patrones de frecuencia de las redes espectrales.

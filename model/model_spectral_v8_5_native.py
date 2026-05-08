@@ -19,7 +19,7 @@ def fwht_best(x):
         x = x.reshape(-1, orig_shape[-1])
         
     res = None
-    if fwht_native is not None:
+    if fwht_native is not None and x.device.type == 'cpu':
         res = fwht_native(x)
         
     if res is None:
