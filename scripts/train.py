@@ -25,6 +25,7 @@ from model.model_spectral_v8_1 import SpectralThinkerV8_1, SpectralArgs as Spect
 from model.model_spectral_v8_4_optimized import SpectralThinkerV8_4, SpectralArgs as SpectralArgsV8_4
 from model.model_spectral_v8_5_native import SpectralThinkerV8_5, SpectralArgs as SpectralArgsV8_5
 from model.model_spectral_v8_6_universal import SpectralThinkerV8_6, SpectralArgs as SpectralArgsV8_6
+from model.model_spectral_v8_6b_gated import SpectralThinkerV8_6b
 from model.model_coga_spectral import TinyThinkerCogaSpectral, CogaSpectralArgs
 from model.model_analog import TinyThinkerAnalog, AnalogArgs
 from model.model_auto_architect import TinyThinkerAutoArchitect, AutoArchitectArgs
@@ -50,7 +51,10 @@ import yaml
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyThinker Pretrain — Versión Optimizada")
     parser.add_argument('--config', type=str, default=None, help='Ruta al config YAML. Sobreescribe otros argumentos.')
-    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'spectral_v7', 'spectral_v8', 'spectral_v8_1', 'spectral_v8_4', 'spectral_v8_5', 'spectral_v8_6', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog'], help='Arquitectura a entrenar.')
+    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'spectral_v7', 'spectral_v8', 'spectral_v8_1', 'spectral_v8_4', 'spectral_v8_5', 'spectral_v8_6', 'spectral_v8_6b', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog'], help='Arquitectura a entrenar.')
+    parser.add_argument('--phase1', action='store_true', help='Blueprint Fase 1: Solo entrena gates (requiere arch gated).')
+    parser.add_argument('--phase2', action='store_true', help='Blueprint Fase 2: Entrena pesos capa por capa (Round-Robin).')
+    parser.add_argument('--rotation_iters', type=int, default=100, help='Iteraciones por cada capa en Fase 2.')
     parser.add_argument('--optimizer', type=str, default='adamw', choices=['adamw', 'swo'], help='Optimizador a utilizar.')
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'dml', 'mps'], help='Dispositivo de entrenamiento.')
     parser.add_argument('--resume', action='store_true', help='Reanudar desde el último checkpoint.')
@@ -124,10 +128,36 @@ def main():
     args_cli = parse_args()
     args_cli = load_config(args_cli)
     
-    if hasattr(args_cli, 'learning_rate'): 
+    # Prioridad: CLI --lr > Config YAML learning_rate
+    # Solo aplicamos el del config si el usuario no pasó uno por CLI o si es el default
+    if hasattr(args_cli, 'learning_rate') and 'lr' not in sys.argv:
         args_cli.lr = args_cli.learning_rate
     
     # ----------------------------------
+    # Setup de Logs y Función t_print (disponible temprano)
+    log_dir = "logs"
+    os.makedirs(log_dir, exist_ok=True)
+    start_date = datetime.datetime.now()
+    log_file = os.path.join(log_dir, f"train_{start_date.strftime('%Y%m%d_%H%M%S')}.log")
+    
+    global_start_time = time.time()
+    def t_print(msg):
+        elapsed = time.time() - global_start_time
+        days = int(elapsed // 86400)
+        hours = int((elapsed % 86400) // 3600)
+        minutes = int((elapsed % 3600) // 60)
+        seconds = int(elapsed % 60)
+        
+        if days > 0:
+            elapsed_str = f"{days:02d}:{hours:02d}:{minutes:02d}:{seconds:02d}"
+        else:
+            elapsed_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            
+        full_msg = f"[{elapsed_str}] {msg}"
+        print(full_msg, flush=True)
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(full_msg + "\n")
+
     # 1. Configuración de Hardware
     # ----------------------------------
     device_name = args_cli.device
@@ -304,7 +334,7 @@ def main():
         spectral_args['k_dim']        = getattr(args_cli, 'k_dim',       128)
         model_args = SpectralArgsV8_1(**spectral_args)
         model = SpectralThinkerV8_1(model_args)
-    elif arch in ('spectral_v8_4', 'spectral_v8_5', 'spectral_v8_6'):
+    elif arch in ('spectral_v8_4', 'spectral_v8_5', 'spectral_v8_6', 'spectral_v8_6b'):
         spectral_args = common_args.copy()
         spectral_args.pop('n_heads', None)
         spectral_args.pop('n_kv_heads', None)
@@ -321,6 +351,9 @@ def main():
         elif arch == 'spectral_v8_6':
             model_args = SpectralArgsV8_6(**spectral_args)
             model = SpectralThinkerV8_6(model_args)
+        elif arch == 'spectral_v8_6b':
+            model_args = SpectralArgsV8_6(**spectral_args)
+            model = SpectralThinkerV8_6b(model_args)
     elif arch == 'coga_spectral':
         coga_spec_args = common_args.copy()
         coga_spec_args.pop('n_layers', None)
@@ -357,6 +390,24 @@ def main():
         raise ValueError(f"Arquitectura desconocida: {arch}")
         
     model.to(device)
+    
+    # LÓGICA BLUEPRINT FASE 1: Congelación de Pesos
+    if getattr(args_cli, 'phase1', False):
+        t_print("⚠️ BLUEPRINT FASE 1 ACTIVADA: Congelando todo excepto GATES...")
+        gated_params = 0
+        frozen_params = 0
+        for name, param in model.named_parameters():
+            if any(x in name for x in ['gate', 'alpha', 'beta']):
+                param.requires_grad = True
+                gated_params += 1
+            else:
+                param.requires_grad = False
+                frozen_params += 1
+        t_print(f" -> Capas para Gating: {gated_params}")
+        t_print(f" -> Capas Congeladas:  {frozen_params}")
+        if gated_params == 0:
+            t_print("❌ ERROR: No se encontraron parámetros de gating. ¿Estás usando una arquitectura 'b'?")
+            sys.exit(1)
     
     if args_cli.use_gradient_checkpointing:
         if arch in ('coga', 'coga_spectral'):
@@ -424,7 +475,7 @@ def main():
             # En PyTorch 2.6 we need to allowlist our custom classes
             torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, SpectralArgsV8_4, SpectralArgsV8_5, SpectralArgsV8_6])
             checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
-            model.load_state_dict(checkpoint['model'])
+            model.load_state_dict(checkpoint['model'], strict=False)
 
             try:
                 optimizer.load_state_dict(checkpoint['optimizer'])
@@ -457,6 +508,10 @@ def main():
         return out
 
     def get_lr(it):
+        # BLUEPRINT FASE 1: Forzamos LR alto y fijo para los gates
+        if getattr(args_cli, 'phase1', False):
+            return args_cli.lr
+            
         if it < DEFAULT_WARMUP:
             return args_cli.lr * it / DEFAULT_WARMUP
         if it > args_cli.max_iters:
@@ -464,30 +519,6 @@ def main():
         decay_ratio = (it - DEFAULT_WARMUP) / (args_cli.max_iters - DEFAULT_WARMUP)
         coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))
         return DEFAULT_MIN_LR + coeff * (args_cli.lr - DEFAULT_MIN_LR)
-
-    # Setup de Logs
-    log_dir = "logs"
-    os.makedirs(log_dir, exist_ok=True)
-    start_date = datetime.datetime.now()
-    log_file = os.path.join(log_dir, f"train_{start_date.strftime('%Y%m%d_%H%M%S')}.log")
-    
-    global_start_time = time.time()
-    def t_print(msg):
-        elapsed = time.time() - global_start_time
-        days = int(elapsed // 86400)
-        hours = int((elapsed % 86400) // 3600)
-        minutes = int((elapsed % 3600) // 60)
-        seconds = int(elapsed % 60)
-        
-        if days > 0:
-            elapsed_str = f"{days:02d}:{hours:02d}:{minutes:02d}:{seconds:02d}"
-        else:
-            elapsed_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-            
-        full_msg = f"[{elapsed_str}] {msg}"
-        print(full_msg, flush=True)
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(full_msg + "\n")
 
     total_params = sum(p.numel() for p in model.parameters())
     model_file = f"model/model_{arch}.py" if arch != 'dense' else "model/model.py"
@@ -542,6 +573,31 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
     t0 = time.time()
 
     while iter_num <= args_cli.max_iters:
+        # LÓGICA BLUEPRINT FASE 2: Rotación de Capas (Round-Robin)
+        if getattr(args_cli, 'phase2', False) and (iter_num % args_cli.rotation_iters == 0):
+            n_layers = len(model.layers) if hasattr(model, 'layers') else 0
+            if n_layers > 0:
+                active_layer_idx = (iter_num // args_cli.rotation_iters) % (n_layers + 1)
+                t_print(f"🔄 BLUEPRINT FASE 2: Rotando parámetros entrenables (Turno: {active_layer_idx})")
+                
+                # Congelar TODO (incluyendo gates de la fase anterior)
+                for p in model.parameters(): p.requires_grad = False
+                
+                if active_layer_idx < n_layers:
+                    # Turno de una capa específica
+                    t_print(f" -> Activando Pesos de Capa {active_layer_idx}")
+                    for name, p in model.layers[active_layer_idx].named_parameters():
+                        if not any(x in name for x in ['gate', 'alpha', 'beta']):
+                            p.requires_grad = True
+                else:
+                    # Turno de Embeddings y Bases (Foundation)
+                    t_print(f" -> Activando Embeddings y Bases")
+                    if hasattr(model, 'codes'): model.codes.requires_grad = True
+                    if hasattr(model, 'basis'): model.basis.requires_grad = True
+                
+                # Reiniciar optimizador para la nueva configuración de parámetros
+                optimizer = create_optimizer(model, args_cli.lr, weight_decay, args_cli.optimizer)
+
         lr = get_lr(iter_num)
         for param_group in optimizer.param_groups: param_group['lr'] = lr
 
