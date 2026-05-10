@@ -3,6 +3,7 @@ import math
 import time
 import datetime
 import contextlib
+import gc
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -63,6 +64,7 @@ def parse_args():
     parser.add_argument('--seq_len', type=int, default=DEFAULT_SEQ_LEN, help='Longitud de secuencia (ventana de contexto).')
     parser.add_argument('--grad_accum_steps', type=int, default=DEFAULT_GRAD_ACCUM, help='Pasos de acumulación de gradientes.')
     parser.add_argument('--lr', type=float, default=DEFAULT_LR, help='Learning rate máximo.')
+    parser.add_argument('--weight_decay', type=float, default=0.0, help='Weight decay (por defecto 0.0).')
     parser.add_argument('--use_gradient_checkpointing', action='store_true', help='Activar ahorro de RAM.')
     parser.add_argument('--data_path', type=str, default=DEFAULT_DATA_PATH, help='Ruta al dataset (.bin).')
     parser.add_argument('--tokenizer_path', type=str, default='model/tokenizer.json', help='Ruta al tokenizador (.json).')
@@ -148,15 +150,20 @@ def main():
         minutes = int((elapsed % 3600) // 60)
         seconds = int(elapsed % 60)
         
-        if days > 0:
-            elapsed_str = f"{days:02d}:{hours:02d}:{minutes:02d}:{seconds:02d}"
-        else:
-            elapsed_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        elapsed_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}" if days == 0 else f"{days:02d}:{hours:02d}:{minutes:02d}:{seconds:02d}"
             
         full_msg = f"[{elapsed_str}] {msg}"
-        print(full_msg, flush=True)
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(full_msg + "\n")
+        # Safe print para evitar UnicodeDecodeError en terminales Windows
+        try:
+            print(full_msg, flush=True)
+        except UnicodeEncodeError:
+            print(full_msg.encode('ascii', errors='replace').decode('ascii'), flush=True)
+            
+        try:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(full_msg + "\n")
+        except:
+            pass
 
     # 1. Configuración de Hardware
     # ----------------------------------
@@ -209,17 +216,15 @@ def main():
     val_start = int(len(full_data) * (1.0 - val_fraction))
     train_data = full_data[:val_start]
     val_data   = full_data[val_start:]
-
     def get_batch(split='train'):
         data = train_data if split == 'train' else val_data
         ix = torch.randint(len(data) - args_cli.seq_len, (args_cli.batch_size,))
-        x = torch.stack([torch.from_numpy((data[i:i+args_cli.seq_len]).astype(np.int64)) for i in ix])
-        y = torch.stack([torch.from_numpy((data[i+1:i+1+args_cli.seq_len]).astype(np.int64)) for i in ix])
-        if device == 'cuda':
-            x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
-        else:
-            x, y = x.to(device), y.to(device)
-        return x, y
+        
+        # Volvemos a un método más seguro pero optimizado
+        x = torch.stack([torch.from_numpy(data[i:i+args_cli.seq_len].astype(np.int64)) for i in ix])
+        y = torch.stack([torch.from_numpy(data[i+1:i+1+args_cli.seq_len].astype(np.int64)) for i in ix])
+        
+        return x.to(device), y.to(device)
 
     # ----------------------------------
     # 3. Inicialización del Modelo
@@ -446,10 +451,9 @@ def main():
         else:
             return torch.optim.AdamW(optim_groups, lr=lr, foreach=False)
 
-    weight_decay = getattr(args_cli, 'weight_decay', 0.1)
-    if 'spectral' in arch:
-        print("[Optimizador] Arquitectura espectral detectada. Forzando weight_decay = 0.0")
-        weight_decay = 0.0
+    weight_decay = getattr(args_cli, 'weight_decay', 0.0)
+    if weight_decay > 0:
+        print(f"⚠️ AVISO: Usando Weight Decay = {weight_decay} (No recomendado para redes espectrales)")
     
     if args_cli.optimizer == 'swo':
         print("[Optimizador] Usando SMO (SuperMarioOptimizer) - Compresión de estado al 93% (K=0.25)")
@@ -670,6 +674,16 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
             # Multiplicamos por accum para ver loss real
             loss_val = loss.item() * args_cli.grad_accum_steps
             t_print(f"iter {iter_num:5d} | loss {loss_val:.4f} | lr {lr:.2e} | time {dt:.2f}s")
+
+        # Gestión de Memoria Periódica (Evita el bloat de 60GB)
+        if iter_num % 25 == 0:
+            gc.collect()
+            if _is_dml:
+                try:
+                    import torch_directml
+                    torch_directml.empty_cache()
+                except:
+                    pass
 
         iter_num += 1
     t_print("Entrenamiento completado exitosamente.")

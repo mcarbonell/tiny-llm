@@ -59,7 +59,7 @@ def generate_recurrent(model, tokenizer, prompt, max_new_tokens=50, temperature=
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--checkpoint', type=str, default="checkpoints/spectral_v8_6/ckpt_pretrain_latest.pt")
+    parser.add_argument('--checkpoint', type=str, default="checkpoints/spectral_v8_6_midi/ckpt_pretrain_best.pt")
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'dml'])
     parser.add_argument('--tokens', type=int, default=50)
     parser.add_argument('--temp', type=float, default=0.7)

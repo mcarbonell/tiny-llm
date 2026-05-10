@@ -28,9 +28,8 @@ def get_best_device():
 def fwht_gpu_vectorized(x):
     """
     Versión de FWHT optimizada para GPU (DirectML/CUDA).
-    Usa operaciones tensoriales masivas en lugar de bucles C++.
+    Minimizamos la creación de tensores intermedios usando cat en lugar de stack.
     """
-    # x: (..., N)
     orig_shape = x.shape
     n = orig_shape[-1]
     b = x.numel() // n
@@ -38,12 +37,11 @@ def fwht_gpu_vectorized(x):
     
     h = 1
     while h < n:
-        # Reestructuramos para operar en paralelo sobre los pares de mariposa
         x = x.view(b, n // (2 * h), 2, h)
-        # En GPU, stack + sum/sub es muy eficiente
         a = x[:, :, 0]
         b_ = x[:, :, 1]
-        x = torch.stack([a + b_, a - b_], dim=2)
+        # cat es más amigable para la gestión de memoria de DirectML que stack
+        x = torch.cat([a + b_, a - b_], dim=2)
         h *= 2
         
     return x.view(orig_shape) / (n ** 0.5)
@@ -56,40 +54,29 @@ except ImportError:
 class FastUniversalFWHT(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x):
-        orig_shape = x.shape
-        x_flat = x.view(-1, orig_shape[-1])
-        device = x.device
-        
-        # Offload a CPU para el kernel ultrarrápido si está disponible
-        if fwht_native is not None:
-            x_cpu = x_flat.cpu() if device.type != 'cpu' else x_flat.clone()
-            res = fwht_native(x_cpu)
-            if res is not None:
-                return res.to(device).view(orig_shape)
-                
-        # Fallback a vectorizado si no hay kernel
-        if device.type != 'cpu':
+        # Encapsulamos el FWHT para que PyTorch lo vea como una op atómica.
+        # No guardamos nada en ctx porque el FWHT es su propio gradiente.
+        if x.device.type != 'cpu':
             return fwht_gpu_vectorized(x)
         return fwht_cpu_best(x)
 
     @staticmethod
     def backward(ctx, grad_output):
-        orig_shape = grad_output.shape
-        grad_flat = grad_output.view(-1, orig_shape[-1])
-        device = grad_output.device
-        
-        if fwht_native is not None:
-            grad_cpu = grad_flat.cpu() if device.type != 'cpu' else grad_flat.clone()
-            res = fwht_native(grad_cpu)
-            if res is not None:
-                return res.to(device).view(orig_shape)
-                
-        if device.type != 'cpu':
-            return fwht_gpu_vectorized(grad_output)
-        return fwht_cpu_best(grad_output)
+        # El gradiente de la FWHT(x) es simplemente FWHT(grad_output) 
+        # (ya que es lineal y ortogonal).
+        # RETORNO: Solo un valor (el gradiente para x).
+        grad_x = fwht_gpu_vectorized(grad_output) if grad_output.device.type != 'cpu' else fwht_cpu_best(grad_output)
+        return grad_x
 
 def fwht_universal(x):
-    """Selecciona el motor de FWHT según el dispositivo del tensor."""
+    """Motor de FWHT atómico para máxima eficiencia de RAM y GPU."""
+    # Caso especial CPU Nativo (inyectado vía ctypes)
+    if x.device.type == 'cpu' and fwht_native is not None:
+        # El kernel nativo es in-place, clonamos para mantener el grafo
+        x_copy = x.clone()
+        res = fwht_native(x_copy)
+        if res is not None: return res
+        
     return FastUniversalFWHT.apply(x)
 
 class SpectralThinkerV8_6(SpectralThinkerV8_5):
