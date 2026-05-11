@@ -64,6 +64,7 @@ def parse_args():
     parser.add_argument('--seq_len', type=int, default=DEFAULT_SEQ_LEN, help='Longitud de secuencia (ventana de contexto).')
     parser.add_argument('--grad_accum_steps', type=int, default=DEFAULT_GRAD_ACCUM, help='Pasos de acumulación de gradientes.')
     parser.add_argument('--lr', type=float, default=DEFAULT_LR, help='Learning rate máximo.')
+    parser.add_argument('--warmup_iters', type=int, default=DEFAULT_WARMUP, help='Iteraciones de calentamiento.')
     parser.add_argument('--weight_decay', type=float, default=0.0, help='Weight decay (por defecto 0.0).')
     parser.add_argument('--use_gradient_checkpointing', action='store_true', help='Activar ahorro de RAM.')
     parser.add_argument('--data_path', type=str, default=DEFAULT_DATA_PATH, help='Ruta al dataset (.bin).')
