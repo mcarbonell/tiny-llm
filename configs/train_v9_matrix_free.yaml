@@ -1,0 +1,19 @@
+arch: spectral_v9
+vocab_size: 32768
+dim: 256
+n_layers: 6
+k_walsh: 64
+max_seq_len: 1024
+batch_size: 16
+grad_accum_steps: 4
+
+# OPTIMIZER
+optimizer: adamw
+lr: 0.03
+warmup_iters: 200
+max_iters: 5000
+weight_decay: 0.0
+
+# DATA
+data_path: data/train_v2_32k.bin
+tokenizer_path: model/tokenizer_v2_32k.json
