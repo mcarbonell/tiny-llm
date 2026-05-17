@@ -32,6 +32,7 @@ from model.model_analog import TinyThinkerAnalog, AnalogArgs
 from model.model_auto_architect import TinyThinkerAutoArchitect, AutoArchitectArgs
 from model.model_auto_analog import TinyThinkerAutoAnalog, AutoAnalogArgs
 from model.model_spectral_v9_matrix_free import SpectralThinkerV9, SpectralArgsV9
+from model.model_spectral_v10_hippocampus import SpectralThinkerV10, SpectralArgsV10
 from optim_supermario import SuperMarioOptimizer
 
 # ----------------------------------
@@ -53,7 +54,7 @@ import yaml
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyThinker Pretrain — Versión Optimizada")
     parser.add_argument('--config', type=str, default=None, help='Ruta al config YAML. Sobreescribe otros argumentos.')
-    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'spectral_v7', 'spectral_v8', 'spectral_v8_1', 'spectral_v8_4', 'spectral_v8_5', 'spectral_v8_6', 'spectral_v8_6b', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog', 'spectral_v9'], help='Arquitectura a entrenar.')
+    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'spectral_v7', 'spectral_v8', 'spectral_v8_1', 'spectral_v8_4', 'spectral_v8_5', 'spectral_v8_6', 'spectral_v8_6b', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog', 'spectral_v9', 'spectral_v10'], help='Arquitectura a entrenar.')
     parser.add_argument('--phase1', action='store_true', help='Blueprint Fase 1: Solo entrena gates (requiere arch gated).')
     parser.add_argument('--phase2', action='store_true', help='Blueprint Fase 2: Entrena pesos capa por capa (Round-Robin).')
     parser.add_argument('--rotation_iters', type=int, default=100, help='Iteraciones por cada capa en Fase 2.')
@@ -400,6 +401,16 @@ def main():
         spec9_args['k_walsh'] = getattr(args_cli, 'k_walsh', 32)
         model_args = SpectralArgsV9(**spec9_args)
         model = SpectralThinkerV9(model_args)
+    elif arch == 'spectral_v10':
+        spec10_args = common_args.copy()
+        spec10_args.pop('n_heads', None)
+        spec10_args.pop('n_kv_heads', None)
+        spec10_args['k_walsh'] = getattr(args_cli, 'k_walsh', 64)
+        spec10_args['k_mem'] = getattr(args_cli, 'k_mem', 32)
+        spec10_args['chunk_size'] = getattr(args_cli, 'chunk_size', 256)
+        spec10_args['gamma'] = getattr(args_cli, 'gamma', 0.9)
+        model_args = SpectralArgsV10(**spec10_args)
+        model = SpectralThinkerV10(model_args)
     else:
         raise ValueError(f"Arquitectura desconocida: {arch}")
         
@@ -486,7 +497,7 @@ def main():
         if os.path.exists(ckpt_path):
             print(f"[Resume] Cargando progreso desde {ckpt_path}...")
             # En PyTorch 2.6 we need to allowlist our custom classes
-            torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, SpectralArgsV8_4, SpectralArgsV8_5, SpectralArgsV8_6, SpectralArgsV9])
+            torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, SpectralArgsV8_4, SpectralArgsV8_5, SpectralArgsV8_6, SpectralArgsV9, SpectralArgsV10])
             checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
             model.load_state_dict(checkpoint['model'], strict=False)
 
@@ -515,6 +526,8 @@ def main():
                 with ctx:
                     logits = model(X)
                     loss = F.cross_entropy(logits.view(-1, logits.size(-1)), Y.view(-1))
+                    if hasattr(model, 'get_aux_loss'):
+                        loss = loss + model.get_aux_loss()
                 losses[k] = loss.item()
             out[split] = losses.mean().item()
         model.train()
@@ -660,6 +673,8 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
             with ctx:
                 logits = model(X)
                 loss = F.cross_entropy(logits.view(-1, logits.size(-1)), Y.view(-1))
+                if hasattr(model, 'get_aux_loss'):
+                    loss = loss + model.get_aux_loss()
                 loss = loss / args_cli.grad_accum_steps
             if scaler.is_enabled():
                 scaler.scale(loss).backward()
