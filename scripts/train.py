@@ -66,8 +66,10 @@ def parse_args():
     parser.add_argument('--seq_len', type=int, default=DEFAULT_SEQ_LEN, help='Longitud de secuencia (ventana de contexto).')
     parser.add_argument('--grad_accum_steps', type=int, default=DEFAULT_GRAD_ACCUM, help='Pasos de acumulación de gradientes.')
     parser.add_argument('--lr', type=float, default=DEFAULT_LR, help='Learning rate máximo.')
+    parser.add_argument('--min_lr', type=float, default=DEFAULT_MIN_LR, help='Learning rate mínimo al final del decay.')
     parser.add_argument('--warmup_iters', type=int, default=DEFAULT_WARMUP, help='Iteraciones de calentamiento.')
     parser.add_argument('--weight_decay', type=float, default=0.0, help='Weight decay (por defecto 0.0).')
+    parser.add_argument('--checkpoint_dir', type=str, default=None, help='Directorio donde guardar/cargar checkpoints.')
     parser.add_argument('--use_gradient_checkpointing', action='store_true', help='Activar ahorro de RAM.')
     parser.add_argument('--data_path', type=str, default=DEFAULT_DATA_PATH, help='Ruta al dataset (.bin).')
     parser.add_argument('--tokenizer_path', type=str, default='model/tokenizer.json', help='Ruta al tokenizador (.json).')
@@ -538,13 +540,16 @@ def main():
         if getattr(args_cli, 'phase1', False):
             return args_cli.lr
             
-        if it < DEFAULT_WARMUP:
-            return args_cli.lr * it / DEFAULT_WARMUP
+        warmup = getattr(args_cli, 'warmup_iters', DEFAULT_WARMUP)
+        min_lr = getattr(args_cli, 'min_lr', DEFAULT_MIN_LR)
+        
+        if it < warmup:
+            return args_cli.lr * it / warmup
         if it > args_cli.max_iters:
-            return DEFAULT_MIN_LR
-        decay_ratio = (it - DEFAULT_WARMUP) / (args_cli.max_iters - DEFAULT_WARMUP)
+            return min_lr
+        decay_ratio = (it - warmup) / (args_cli.max_iters - warmup)
         coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))
-        return DEFAULT_MIN_LR + coeff * (args_cli.lr - DEFAULT_MIN_LR)
+        return min_lr + coeff * (args_cli.lr - min_lr)
 
     total_params = sum(p.numel() for p in model.parameters())
     model_file = f"model/model_{arch}.py" if arch != 'dense' else "model/model.py"
