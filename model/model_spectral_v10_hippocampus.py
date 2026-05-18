@@ -47,14 +47,21 @@ def get_walsh_matrix_1d(dim):
     ], dim=0) / math.sqrt(2)
 
 class WalshLinear(nn.Module):
-    def __init__(self, in_features, out_features, k, normalized=True):
+    def __init__(self, in_features, out_features, k, normalized=True, H_in=None, H_out=None):
         super().__init__()
         self.k = min(k, in_features, out_features)
         self.core = nn.Parameter(torch.randn(self.k, self.k) / math.sqrt(self.k))
         self.scale = nn.Parameter(torch.ones(1)) if normalized else None
         
-        self.register_buffer('H_in', get_walsh_matrix_1d(in_features))
-        self.register_buffer('H_out', get_walsh_matrix_1d(out_features))
+        if H_in is not None:
+            self.H_in = H_in
+        else:
+            self.register_buffer('H_in', get_walsh_matrix_1d(in_features))
+            
+        if H_out is not None:
+            self.H_out = H_out
+        else:
+            self.register_buffer('H_out', get_walsh_matrix_1d(out_features))
 
     def forward(self, x):
         W_synthesized = self.H_out[:, :self.k] @ self.core @ self.H_in[:self.k, :]
@@ -68,7 +75,7 @@ class WalshLinear(nn.Module):
 # STATEFUL MIXER (FOURIER HIPPOCAMPUS)
 # ══════════════════════════════════════════════════════════════════════
 class StatefulComplexFFTMixer(nn.Module):
-    def __init__(self, T, D, k_walsh, k_mem, gamma):
+    def __init__(self, T, D, k_walsh, k_mem, gamma, H_global=None):
         super().__init__()
         self.T = T
         self.pad_T = 1
@@ -81,7 +88,7 @@ class StatefulComplexFFTMixer(nn.Module):
         mask = torch.zeros(self.pad_T)
         mask[:T] = 1.0
         self.register_buffer('causal_mask', mask)
-        self.out_proj = WalshLinear(D, D, k_walsh, normalized=True)
+        self.out_proj = WalshLinear(D, D, k_walsh, normalized=True, H_in=H_global, H_out=H_global)
         
         # Hippocampus
         self.k_mem = min(k_mem, self.n_freq)
@@ -130,17 +137,17 @@ class StatefulComplexFFTMixer(nn.Module):
         return torch.mean(torch.abs(diffs))
 
 class NarrowFFN(nn.Module):
-    def __init__(self, D, k_walsh):
+    def __init__(self, D, k_walsh, H_global=None):
         super().__init__()
-        self.proj = WalshLinear(D, D, k_walsh, normalized=True)
+        self.proj = WalshLinear(D, D, k_walsh, normalized=True, H_in=H_global, H_out=H_global)
     def forward(self, x):
         return F.gelu(self.proj(x))
 
 class nGPTBlockStateful(nn.Module):
-    def __init__(self, args: SpectralArgsV10):
+    def __init__(self, args: SpectralArgsV10, H_global=None):
         super().__init__()
-        self.mixer = StatefulComplexFFTMixer(args.chunk_size, args.dim, args.k_walsh, args.k_mem, args.gamma)
-        self.ffn = NarrowFFN(args.dim, args.k_walsh)
+        self.mixer = StatefulComplexFFTMixer(args.chunk_size, args.dim, args.k_walsh, args.k_mem, args.gamma, H_global=H_global)
+        self.ffn = NarrowFFN(args.dim, args.k_walsh, H_global=H_global)
         self.alpha_m = nn.Parameter(torch.full((args.dim,), 0.05))
         self.alpha_f = nn.Parameter(torch.full((args.dim,), 0.05))
 
@@ -161,7 +168,12 @@ class SpectralThinkerV10(nn.Module):
         super().__init__()
         self.args = args
         self.embed = nn.Embedding(args.vocab_size, args.dim)
-        self.blocks = nn.ModuleList([nGPTBlockStateful(args) for _ in range(args.n_layers)])
+        
+        # Precomputamos la matriz de Walsh global una sola vez para compartirla entre todas las capas
+        H_walsh = get_walsh_matrix_1d(args.dim)
+        self.register_buffer('H_global', H_walsh)
+        
+        self.blocks = nn.ModuleList([nGPTBlockStateful(args, H_global=self.H_global) for _ in range(args.n_layers)])
         self.head = SphericalHead(args.dim, args.vocab_size, init_tau=10.0)
 
     def forward(self, x_full):
