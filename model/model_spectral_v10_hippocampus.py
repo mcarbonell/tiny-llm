@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from dataclasses import dataclass
+from kernels.fused_residual_norm_op import fused_residual_norm
 
 @dataclass
 class SpectralArgsV10:
@@ -146,10 +147,10 @@ class nGPTBlockStateful(nn.Module):
     def forward(self, x, state=None):
         m, next_state = self.mixer(x, state)
         m = norm_sphere(m)
-        x = norm_sphere(x + self.alpha_m.abs().unsqueeze(0).unsqueeze(0) * m)
+        x = fused_residual_norm(x, m, self.alpha_m)
         
         f = norm_sphere(self.ffn(x))
-        x = norm_sphere(x + self.alpha_f.abs().unsqueeze(0).unsqueeze(0) * f)
+        x = fused_residual_norm(x, f, self.alpha_f)
         return x, next_state
 
 # ══════════════════════════════════════════════════════════════════════
