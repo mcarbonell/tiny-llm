@@ -2,7 +2,7 @@ import os
 import sys
 import torch
 import argparse
-from tokenizers import Tokenizer
+from tokenizers import Tokenizer, decoders
 import torch.nn.functional as F
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -59,6 +59,8 @@ def generate_text(model, tokenizer, prompt, max_tokens=100, temperature=0.7, top
     print("[GENERANDO] ", end="", flush=True)
     
     generated_text = ""
+    # Mantenemos el texto decodificado hasta el momento para calcular la diferencia
+    decoded_so_far = tokenizer.decode(input_ids, skip_special_tokens=True)
     past_key_values = None
     
     with torch.no_grad():
@@ -110,9 +112,14 @@ def generate_text(model, tokenizer, prompt, max_tokens=100, temperature=0.7, top
             if token_id == tokenizer.token_to_id("<eos>") or token_id == tokenizer.token_to_id("<pad>"):
                 break
                 
-            new_word = tokenizer.decode([token_id], skip_special_tokens=False)
-            generated_text += new_word
-            print(new_word, end="", flush=True)
+            # Decodificación delta acumulativa estándar de BPE para evitar caracteres 'Ġ' y bytes rotos
+            current_ids = x[0].tolist()
+            decoded_current = tokenizer.decode(current_ids, skip_special_tokens=True)
+            new_text = decoded_current[len(decoded_so_far):]
+            decoded_so_far = decoded_current
+            
+            generated_text += new_text
+            print(new_text, end="", flush=True)
             
     print("\n")
     return generated_text
@@ -135,6 +142,8 @@ def main():
 
     device = torch.device(args.device)
     tokenizer = Tokenizer.from_file(args.tokenizer)
+    if tokenizer.decoder is None:
+        tokenizer.decoder = decoders.ByteLevel()
     
     print(f"Cargando modelo desde {args.checkpoint}...")
     model, arch, model_args, iter_num, val_loss = load_checkpoint(args.checkpoint, device)
