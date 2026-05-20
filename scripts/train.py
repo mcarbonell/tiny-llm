@@ -33,6 +33,7 @@ from model.model_auto_architect import TinyThinkerAutoArchitect, AutoArchitectAr
 from model.model_auto_analog import TinyThinkerAutoAnalog, AutoAnalogArgs
 from model.model_spectral_v9_matrix_free import SpectralThinkerV9, SpectralArgsV9
 from model.model_spectral_v10_hippocampus import SpectralThinkerV10, SpectralArgsV10
+from model.model_spectral_v11_albert import SpectralThinkerV11, SpectralArgsV11
 from optim_supermario import SuperMarioOptimizer
 
 # ----------------------------------
@@ -54,7 +55,7 @@ import yaml
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyThinker Pretrain — Versión Optimizada")
     parser.add_argument('--config', type=str, default=None, help='Ruta al config YAML. Sobreescribe otros argumentos.')
-    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'spectral_v7', 'spectral_v8', 'spectral_v8_1', 'spectral_v8_4', 'spectral_v8_5', 'spectral_v8_6', 'spectral_v8_6b', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog', 'spectral_v9', 'spectral_v10'], help='Arquitectura a entrenar.')
+    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'spectral_v7', 'spectral_v8', 'spectral_v8_1', 'spectral_v8_4', 'spectral_v8_5', 'spectral_v8_6', 'spectral_v8_6b', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog', 'spectral_v9', 'spectral_v10', 'spectral_v11'], help='Arquitectura a entrenar.')
     parser.add_argument('--phase1', action='store_true', help='Blueprint Fase 1: Solo entrena gates (requiere arch gated).')
     parser.add_argument('--phase2', action='store_true', help='Blueprint Fase 2: Entrena pesos capa por capa (Round-Robin).')
     parser.add_argument('--rotation_iters', type=int, default=100, help='Iteraciones por cada capa en Fase 2.')
@@ -147,6 +148,14 @@ def main():
     start_date = datetime.datetime.now()
     log_file = os.path.join(log_dir, f"train_{start_date.strftime('%Y%m%d_%H%M%S')}.log")
     
+    # Escribir la línea de comandos exacta como primera línea del log
+    cmd_str = "python " + " ".join(sys.argv)
+    try:
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.write(cmd_str + "\n")
+    except:
+        pass
+        
     global_start_time = time.time()
     def t_print(msg):
         elapsed = time.time() - global_start_time
@@ -413,6 +422,17 @@ def main():
         spec10_args['gamma'] = getattr(args_cli, 'gamma', 0.9)
         model_args = SpectralArgsV10(**spec10_args)
         model = SpectralThinkerV10(model_args)
+    elif arch == 'spectral_v11':
+        spec11_args = common_args.copy()
+        spec11_args.pop('n_heads', None)
+        spec11_args.pop('n_kv_heads', None)
+        spec11_args['k_walsh'] = getattr(args_cli, 'k_walsh', 64)
+        spec11_args['k_mem'] = getattr(args_cli, 'k_mem', 32)
+        spec11_args['chunk_size'] = getattr(args_cli, 'chunk_size', 256)
+        spec11_args['gamma'] = getattr(args_cli, 'gamma', 0.9)
+        spec11_args['emb_dim'] = getattr(args_cli, 'emb_dim', 128)
+        model_args = SpectralArgsV11(**spec11_args)
+        model = SpectralThinkerV11(model_args)
     else:
         raise ValueError(f"Arquitectura desconocida: {arch}")
         
@@ -499,7 +519,7 @@ def main():
         if os.path.exists(ckpt_path):
             print(f"[Resume] Cargando progreso desde {ckpt_path}...")
             # En PyTorch 2.6 we need to allowlist our custom classes
-            torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, SpectralArgsV8_4, SpectralArgsV8_5, SpectralArgsV8_6, SpectralArgsV9, SpectralArgsV10])
+            torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, SpectralArgsV8_4, SpectralArgsV8_5, SpectralArgsV8_6, SpectralArgsV9, SpectralArgsV10, SpectralArgsV11])
             checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
             model.load_state_dict(checkpoint['model'], strict=False)
 
@@ -552,7 +572,30 @@ def main():
         return min_lr + coeff * (args_cli.lr - min_lr)
 
     total_params = sum(p.numel() for p in model.parameters())
-    model_file = f"model/model_{arch}.py" if arch != 'dense' else "model/model.py"
+    model_files = {
+        'dense': 'model/model.py',
+        'moe': 'model/model_moe.py',
+        'coga': 'model/model_coga.py',
+        'spectral': 'model/model_spectral.py',
+        'spectral_v4': 'model/model_spectral_v4.py',
+        'spectral_v5': 'model/model_spectral_v5.py',
+        'spectral_v6': 'model/model_spectral_v6.py',
+        'spectral_v7': 'model/model_spectral_v7.py',
+        'spectral_v8': 'model/model_spectral_v8.py',
+        'spectral_v8_1': 'model/model_spectral_v8_1.py',
+        'spectral_v8_4': 'model/model_spectral_v8_4_optimized.py',
+        'spectral_v8_5': 'model/model_spectral_v8_5_native.py',
+        'spectral_v8_6': 'model/model_spectral_v8_6_universal.py',
+        'spectral_v8_6b': 'model/model_spectral_v8_6b_gated.py',
+        'coga_spectral': 'model/model_coga_spectral.py',
+        'analog': 'model/model_analog.py',
+        'auto_architect': 'model/model_auto_architect.py',
+        'auto_analog': 'model/model_auto_analog.py',
+        'spectral_v9': 'model/model_spectral_v9_matrix_free.py',
+        'spectral_v10': 'model/model_spectral_v10_hippocampus.py',
+        'spectral_v11': 'model/model_spectral_v11_albert.py',
+    }
+    model_file = model_files.get(arch, f"model/model_{arch}.py")
     
     # Resolver n_layers para el display
     if hasattr(model_args, 'n_layers'):
@@ -576,6 +619,7 @@ CPU THREADS: {torch.get_num_threads()}
 model_file: {model_file}
 tokenizer:  {args_cli.tokenizer_path}
 dataset:    {args_cli.data_path}
+config:     {getattr(args_cli, 'config', 'N/A')}
 --------------- HYPERPARAMS -----------
 batch_size: {args_cli.batch_size}
 seq_len: {args_cli.seq_len}
