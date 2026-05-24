@@ -257,3 +257,9 @@ For $d=2048$ and $k=512$, this double matrix multiplication takes $2 \cdot 2048 
 Since Run 4 combines the high representational width ($d=2048$) with maximum logical rank ($k=512$) and virtual recurrence depth ($l=8$), we predict:
 1. **Validation Loss Champion:** Run 4 is highly likely to achieve the lowest validation loss of the entire grid search, projected to hit **`~3.95 - 4.00`** at iteration 2000.
 2. **High-Fidelity Prompt Containment:** The combination of $l=8$ virtual layers and $k=512$ Walsh core ensures high-strength prompt alignment, resolving the prompt boundary leakage observed in Run 3.
+
+### Hardware Compatibility Boundary: DirectML ComplexFloat Incompatibility
+Empirical testing has revealed a hard compatibility boundary when attempting to execute V11 on the Radeon 780M iGPU via PyTorch DirectML (`--device dml`):
+* **Error Encountered:** `[dml_util.cc:118] Invalid or unsupported data type ComplexFloat`.
+* **Mathematical Root Cause:** The Fourier Hippocampus memory gating system (`StatefulComplexFFTMixer`) utilizes complex Fast Fourier Transforms (`rfft`) and complex read/write gate projections, which operate over the `torch.complex64` (`ComplexFloat`) tensor representation. DirectML, operating under DirectX 12 Compute Shaders, lacks native hardware or driver-level support for complex-number formats.
+* **Architectural Conclusion:** This confirms that local training of stateful, Fourier-backed, causal-gated neural networks on AMD APUs is **strictly bound to pure CPU execution**. Zen 4's native AVX-512 vector pipeline remains the only stable local platform capable of executing complex FFT gating and dynamic tensor memory states seamlessly.

@@ -54,10 +54,11 @@ All models pre-trained for 2000 iterations on CPU (constant LR=0.015, context le
 * **The Width-vs-Depth Efficiency Paradox:** Doubling representation space width to $d=2048$ (Run 3) provides a solid loss improvement over $d=1024$ (Run 1). However, it **fails to match** the performance of the deeper and higher-rank model of Run 2 ($d=1024, k=512, l=8$), which has fewer parameters (9.44M vs 9.57M). This proves that structural routing and transformation complexity (depth/rank) are substantially more parameter-efficient than raw embedding width.
 * **Virtual Recurrence Basin:** Increasing virtual block sharing layers to $l=8$ combined with higher logical Walsh rank $k=512$ provides a highly stable convergence path, eliminating the late-stage parameter oscillation observed in the $l=6$ baseline.
 * **Matrix-Free Zero Overhead Scaling:** Quadrupling the Walsh logical operations from $k=256$ to $k=512$ incurs absolutely zero extra computational overhead on baseline widths. However, at $d=2048$ and $k=512$ (Run 4), the dynamic synthesis of WalshLinear weights becomes a FLOPs bottleneck on CPU threads, highlighting the importance of GPU tensor cores for extreme dimension scaling.
+* **Hardware-Level DirectML Boundary:** Verified that local training on integrated AMD APUs via PyTorch DirectML (`--device dml`) is blocked by a lack of GPU-level complex-number (`ComplexFloat`) support in DirectX 12. This makes Zen 4's AVX-512 CPU execution an architectural necessity for our Fourier stateful memory model.
 * **Qualitative Grammar and Factual Anchors:** Despite having under 10M parameters, the model successfully synthesized complex programming structures (`def`, `return`, `elif`) and showed highly detailed associative geographic representations (correct French communes and departments).
 
 ## Next Steps
-1. **Analyze Run 4 Final Checkpoint:** Wait for completion of the active training of `configs/grid_search/v11_e256_d2048_k512_l8.yaml` to confirm its status as the absolute pre-training champion (projected val loss `< 4.00`).
+1. **Analyze Run 4 Final Checkpoint:** Wait for completion of the active CPU training of `configs/grid_search/v11_e256_d2048_k512_l8.yaml` to confirm its status as the absolute pre-training champion (projected val loss `< 4.00`).
 2. **Context Extension Benchmark:** Run evaluations on stateful Fourier memory scaling up to 4096 tokens.
 
 ---
