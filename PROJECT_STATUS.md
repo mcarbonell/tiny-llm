@@ -46,9 +46,9 @@ We have successfully implemented and verified the **V11 Fourier-ALBERT** (Fourie
 ### 3. Empirical Results (Pre-training Grid Search for Heavy-Weight Configs)
 All models pre-trained for 2000 iterations on CPU (constant LR=0.015, context length 1024, batch size 16):
 * `v11_e256_d1024_k256_l6` (Run 1: 9.05M parameters): Best Val Loss = **4.3282**
-* `v11_e256_d1024_k512_l8` (Run 2: 9.44M parameters): Best Val Loss = **4.1287** (Our current V11 champion!)
 * `v11_e256_d2048_k256_l6` (Run 3: 9.57M parameters): Best Val Loss = **4.2145** (Completed in ~35 hours)
-* `v11_e256_d2048_k512_l8` (Run 4: 9.97M parameters): **Currently Active** (Launched by user)
+* `v11_e256_d2048_k512_l8` (Run 4: 9.97M parameters): Best Val Loss = **4.1600** (Completed in ~45.4 hours)
+* `v11_e256_d1024_k512_l8` (Run 2: 9.44M parameters): Best Val Loss = **4.1287** (**The Absolute V11 Sovereign Champion!**)
 
 ### 4. Core V11 Discoveries
 * **The Width-vs-Depth Efficiency Paradox:** Doubling representation space width to $d=2048$ (Run 3) provides a solid loss improvement over $d=1024$ (Run 1). However, it **fails to match** the performance of the deeper and higher-rank model of Run 2 ($d=1024, k=512, l=8$), which has fewer parameters (9.44M vs 9.57M). This proves that structural routing and transformation complexity (depth/rank) are substantially more parameter-efficient than raw embedding width.
@@ -58,7 +58,7 @@ All models pre-trained for 2000 iterations on CPU (constant LR=0.015, context le
 * **Qualitative Grammar and Factual Anchors:** Despite having under 10M parameters, the model successfully synthesized complex programming structures (`def`, `return`, `elif`) and showed highly detailed associative geographic representations (correct French communes and departments).
 
 ## Next Steps
-1. **Analyze Run 4 Final Checkpoint:** Wait for completion of the active CPU training of `configs/grid_search/v11_e256_d2048_k512_l8.yaml` to confirm its status as the absolute pre-training champion (projected val loss `< 4.00`).
+1. **Transition to SFT Fine-Tuning Phase:** Take the sovereign model checkpoint (`checkpoints/test_v11_e256_d1024_k512_l8/ckpt_pretrain_best.pt`) and initiate Supervised Fine-Tuning (SFT) using the multi-level reasoning curriculum (`data/tool_dataset_real.json`).
 2. **Context Extension Benchmark:** Run evaluations on stateful Fourier memory scaling up to 4096 tokens.
 
 ---
