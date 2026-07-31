@@ -34,6 +34,8 @@ from model.model_auto_analog import TinyThinkerAutoAnalog, AutoAnalogArgs
 from model.model_spectral_v9_matrix_free import SpectralThinkerV9, SpectralArgsV9
 from model.model_spectral_v10_hippocampus import SpectralThinkerV10, SpectralArgsV10
 from model.model_spectral_v11_albert import SpectralThinkerV11, SpectralArgsV11
+from model.model_spectral_v12_delta_phase import SpectralThinkerV12, SpectralArgsV12
+from model.model_spectral_unified import UnifiedSpectral, UnifiedArgs
 from optim_supermario import SuperMarioOptimizer
 
 # ----------------------------------
@@ -55,7 +57,8 @@ import yaml
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyThinker Pretrain — Versión Optimizada")
     parser.add_argument('--config', type=str, default=None, help='Ruta al config YAML. Sobreescribe otros argumentos.')
-    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'spectral_v7', 'spectral_v8', 'spectral_v8_1', 'spectral_v8_4', 'spectral_v8_5', 'spectral_v8_6', 'spectral_v8_6b', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog', 'spectral_v9', 'spectral_v10', 'spectral_v11'], help='Arquitectura a entrenar.')
+    parser.add_argument('--arch', type=str, default='dense', choices=['dense', 'moe', 'coga', 'spectral', 'spectral_v4', 'spectral_v5', 'spectral_v6', 'spectral_v7', 'spectral_v8', 'spectral_v8_1', 'spectral_v8_4', 'spectral_v8_5', 'spectral_v8_6', 'spectral_v8_6b', 'coga_spectral', 'analog', 'auto_architect', 'auto_analog', 'spectral_v9', 'spectral_v10', 
+'spectral_v11', 'spectral_v12', 'unified'], help='Arquitectura a entrenar.')
     parser.add_argument('--phase1', action='store_true', help='Blueprint Fase 1: Solo entrena gates (requiere arch gated).')
     parser.add_argument('--phase2', action='store_true', help='Blueprint Fase 2: Entrena pesos capa por capa (Round-Robin).')
     parser.add_argument('--rotation_iters', type=int, default=100, help='Iteraciones por cada capa en Fase 2.')
@@ -433,6 +436,32 @@ def main():
         spec11_args['emb_dim'] = getattr(args_cli, 'emb_dim', 128)
         model_args = SpectralArgsV11(**spec11_args)
         model = SpectralThinkerV11(model_args)
+    elif arch == 'unified':
+        unified_args = common_args.copy()
+        unified_args.pop('n_heads', None)
+        unified_args.pop('n_kv_heads', None)
+        unified_args['k_walsh'] = getattr(args_cli, 'k_walsh', 256)
+        unified_args['use_hippocampus'] = getattr(args_cli, 'use_hippocampus', True)
+        unified_args['k_mem'] = getattr(args_cli, 'k_mem', 32)
+        unified_args['chunk_size'] = getattr(args_cli, 'chunk_size', 1024)
+        unified_args['gamma'] = getattr(args_cli, 'gamma', 0.9)
+        unified_args['lambda_phase'] = getattr(args_cli, 'lambda_phase', 0.01)
+        unified_args['emb_dim'] = getattr(args_cli, 'emb_dim', 0)
+        unified_args['spherical_head'] = getattr(args_cli, 'spherical_head', True)
+        unified_args['weight_tying'] = getattr(args_cli, 'weight_tying', True)
+        unified_args['use_fwht_kernel'] = getattr(args_cli, 'use_fwht_kernel', True)
+        model_args = UnifiedArgs(**unified_args)
+        model = UnifiedSpectral(model_args)
+    elif arch == 'spectral_v12':
+        spec12_args = common_args.copy()
+        spec12_args.pop('n_kv_heads', None)
+        spec12_args['n_heads'] = getattr(args_cli, 'n_heads', 8)
+        spec12_args['conv_kernel_size'] = getattr(args_cli, 'conv_kernel_size', 4)
+        spec12_args['emb_dim'] = getattr(args_cli, 'emb_dim', 256)
+        spec12_args['spherical_head'] = getattr(args_cli, 'spherical_head', False)
+        spec12_args['weight_tying'] = getattr(args_cli, 'weight_tying', True)
+        model_args = SpectralArgsV12(**spec12_args)
+        model = SpectralThinkerV12(model_args)
     else:
         raise ValueError(f"Arquitectura desconocida: {arch}")
         

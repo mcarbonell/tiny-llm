@@ -1,0 +1,15 @@
+dim: 2048
+emb_dim: 256
+n_layers: 8
+vocab_size: 32768
+max_seq_len: 1024
+k_walsh: 256
+use_hippocampus: true
+k_mem: 32
+chunk_size: 1024
+gamma: 0.9
+lambda_phase: 0.01
+spherical_head: true
+weight_tying: true
+alpha_init: 0.05
+checkpoint_dir: checkpoints/unified_v1

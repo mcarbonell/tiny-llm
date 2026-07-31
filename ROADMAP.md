@@ -5,7 +5,7 @@
 ## Fase 0: El Legado Genético
 - [x] **SOMA (Macro):** Validación de la gestión de contexto soberana y "The Bitter Lesson".
 - [x] **COGA (Sistema):** Implementación del Scratchpad y bucle recurrente inicial.
-- [x] **Attention Neuron (Átomo):** Descubrimiento de núcleos Matrix-Free y el Hipocampo Holográfico.
+- [x] **Attention Neuron (Átomo):** Descubrimiento de núcleos Matrix-Free, el Hipocampo Holográfico y la Regla Delta en Fase Compleja.
 
 ## Fase 1: Adquisición del Lenguaje (Pre-training)
 - [x] **1.1. Setup Inicial:**
@@ -17,43 +17,39 @@
   - [x] Tokenizar y guardar el dataset de entrenamiento en binario para carga rápida.
 - [x] **1.3. Arquitectura del Modelo (`model.py`):**
   - [x] Implementar Decoder-only Transformer genérico.
-  - [x] Integrar RoPE (Rotary Position Embeddings).
-  - [x] Integrar RMSNorm.
-  - [x] Integrar SwiGLU.
-  - [x] Integrar GQA (Grouped-Query Attention).
+  - [x] Integrar RoPE (Rotary Position Embeddings), RMSNorm, SwiGLU, GQA.
   - [x] Escribir tests unitarios (`tests/test_model.py`) para comprobar dimensiones y pesos.
 - [x] **1.4. Bucle de Entrenamiento (`train.py`):**
   - [x] Implementar loop limpio en PyTorch con AdamW + Cosine Decay.
-  - [x] Añadir Mixed Precision (AMP - fp16/bf16).
-  - [x] Añadir Gradient Accumulation.
-  - [x] Ejecutar prueba en entorno local verificando que el *loss* disminuye.
+  - [x] Añadir Mixed Precision (AMP - fp16/bf16) y Gradient Accumulation.
 
 ## Fase 2: Razonamiento (Chain of Thought - CoT)
-- [x] Descargar y curar un subconjunto lógico/matemático (ej. de `OpenOrca` o `gsm8k`).
-- [x] Preparar prompt templates para enseñar pensar "paso a paso" con marcas `<THINK> ... </THINK>`.
+- [x] Descargar y curar un subconjunto lógico/matemático.
+- [x] Preparar prompt templates para enseñar a pensar "paso a paso" con marcas `<THINK> ... </THINK>`.
 - [x] Fine-tuning (Continual Pre-training) del modelo de Fase 1 con el dataset CoT.
 
 ## Fase 3: Uso de Herramientas (Tool-Calling)
-- [x] **3.1. Generación de Dataset Sintético:**
-  - [x] Crear script para generar ejemplos de consulta -> decisión de tool-call -> resultado -> respuesta.
-- [x] **3.2. Formato y Entrenamiento:**
-  - [x] Implementar tokens especiales (`<TOOL_CALL>`, `</TOOL_CALL>`, `<TOOL_RESULT>`).
-  - [x] Entrenar el modelo sobre la sintaxis estricta.
-- [x] **3.3. Inferencia Interactiva (`chat.py`):**
-  - [x] Desarrollar sistema interactivo que pause la generación de texto al detectar un `<TOOL_CALL>`.
-  - [x] Conectar una herramienta real (ej. DuckDuckGo o Wikipedia).
-  - [x] Retroalimentar el `<TOOL_RESULT>` al modelo y continuar hasta la respuesta final.
+- [x] **3.1. Generación de Dataset Sintético:** Ejemplos de consulta -> decisión de tool-call -> resultado -> respuesta.
+- [x] **3.2. Formato y Entrenamiento:** Tokens especiales (`<TOOL_CALL>`, `</TOOL_CALL>`, `<TOOL_RESULT>`).
+- [x] **3.3. Inferencia Interactiva (`chat.py`):** Sistema interactivo que pausa y ejecuta herramientas externas.
 
-## Fase 4+: Hacia la Arquitectura Cognitiva (TCA)
-Esta fase representa la frontera actual del proyecto, centrada en convertir el LLM en un motor de razonamiento autónomo y modular.
+## Fase 4: Era Espectral y Ablations Unificados (V10 / V11 / serious_v1)
+- [x] **Grid Search V10 Matrix-Free:** Demostración de escalado de rango Walsh $k$ (V10 dim512 k128 val_loss 3.9299).
+- [x] **V11 Fourier-ALBERT:** Compartición de pesos de bloques virtuales (loss 4.1287 a 9.44M params).
+- [x] **Run Serio A (`serious_v1`):** Ejecución de 2000 iters. Confirmada sensibilidad crítica al LR (1e-3 vs 1.5e-2 de V11).
 
-### 📄 Documentación de Investigación (Mayo 2026)
-- [**Research Proposal: TinyThinker Cognitive Architecture**](docs/research/tinythinker_next/research_proposal.md): Propuesta integral de OS Cognitivo con recurrencia y scratchpad mutable.
-- [**Modular Virgin Experts (MVE)**](docs/research/tinythinker_next/modular_virgin_experts_paper.md): Técnica para aprendizaje continuo sin olvido catastrófico mediante slots de expertos reservados.
-- [**The Silent Architect: Philosophical Implications**](docs/research/tinythinker_next/scratchpad_philosophical_implications.md): Ensayo sobre la transición del LLM de Sistema 1 a Sistema 2 mediante pensamiento privado.
+## Fase 5: La Era Delta-Phase (V12 & Kernel C++/PyTorch en O(N)) — FRONTERA ACTUAL
+Esta es la frontera activa del proyecto, transfiriendo la Regla Delta en Fase Compleja demostrada en `attention-neuron` (V298/V299).
 
-### 🧪 Objetivos Técnicos
-- [x] **Estabilización de Spectral V7:** Superado el cuello de botella del vocabulario mediante cabezal factorizado.
-- [ ] **Implementar TCA v2:** Finalizar el prototipo `model_coga_spectral_v2.py` con integración total de herramientas.
-- [ ] **Curriculum de Autocorrección:** Entrenar el modelo para detectar y borrar errores en su propio scratchpad.
-- [ ] **Inferencia Adaptativa:** Perfeccionar el cerebelo espectral para optimizar el budget de tokens internos por tarea.
+### 🧪 Objetivos Técnicos V12
+- [ ] **5.1. Kernel C++/PyTorch Vectorizado:**
+  - Implementar prototipo de kernel fusionado en C++/PyTorch / TorchScript para el scan causal de la Regla Delta Matricial de Fase Compleja ($M_t = M_{t-1} + \frac{\beta}{d_k} e_t \otimes K_t$).
+  - Benchmark de rendimiento en CPU (AVX-512) medido en **tokens/segundo en inferencia con memoria $O(1)$ constante**.
+- [ ] **5.2. Arquitectura V12 (`model_spectral_v12_delta_phase.py`):**
+  - Mezclador: `ShortCausalConv1D (k=4)` + `DeltaPhaseHolographicBlock` ($O(N)$).
+  - Integración con embeddings factorizados y weight-tying de V11.
+- [ ] **5.3. Pre-entrenamiento Serio V12:**
+  - Ejecutar entrenamiento con sweep de LR (0.005 a 0.015) para romper la barrera de loss de V11 (4.12) en preentrenamiento de lenguaje.
+
+---
+*Roadmap actualizado por TinyThinker Architect. La memoria de fase en O(N) es el camino al Agente Soberano.*

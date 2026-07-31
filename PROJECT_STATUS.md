@@ -1,65 +1,56 @@
-# Project Status: Complete Scaling Law Analysis of Spectral V10
+# Project Status: Complete Evolution of TinyThinker (V10 to V12 Delta-Phase)
 
-**Last Updated:** May 20, 2026
+**Last Updated:** July 22, 2026
 
 ## Genesis and Lineage: The Path to Sovereignty
 This project is the culmination of a fractal evolution of sovereign algorithms:
 1. **SOMA (The Macro Ancestor):** External orchestrator that gave volition to the model over its context (pin/unpin/edit). Proof that the LLM must manage its own attention.
-2. **COGA (El Salto al Sistema):** Internalization of SOMA. The transition from "function calls" to a Mutable Scratchpad and Dynamic Recurrence within the inference engine.
-3. **Attention Neuron (The Atomic Level):** Reinventing the neuron. The discovery of Spectral Cores (DCT/Walsh) and O(1) Holographic Memory.
-4. **TinyThinker Spectral TCA (The Final Synthesis):** A Matrix-Free LLM that uses the laws of frequency to reason and remember with infinite efficiency on local hardware.
-
-## Main Milestone: Matrix-Free V10 Grid Search Completed
-We have completed the empirical pre-training grid search for the Matrix-Free Spectral nGPT V10 (with Fourier Hippocampus) architecture across hidden dimensions d=128, 256, 512 and Walsh ranks k=32, 64, 128.
-
-### 1. Empirical Results Matrix
-All models pre-trained for 2000 iterations with constant learning rate (LR=0.03), context length 1024, and batch size 16:
-* `v10_dim128_k64` (9.24M parameters, ~49k Walsh cores): Best Val Loss = **4.2656**
-* `v10_dim256_k32` (16.82M parameters, ~12k Walsh cores): Best Val Loss = **4.2636**
-* `v10_dim256_k64` (16.87M parameters, ~49k Walsh cores): Best Val Loss = **4.2094**
-* `v10_dim256_k128` (16.98M parameters, ~197k Walsh cores): Best Val Loss = **4.0205**
-* `v10_dim512_k64` (33.61M parameters, ~49k Walsh cores): Best Val Loss = **3.9571**
-* `v10_dim512_k128` (33.76M parameters, ~197k Walsh cores): Best Val Loss = **3.9299** (Our new sovereign champion!)
-
-### 2. Scientific Discoveries
-* **The Law of Compensation:** Lower dimensional representations (d=128) can compensate for their narrowness via higher-rank logical transformations (k=64) to match the performance of a wider model (d=256, k=32).
-* **Decoupled Parameter Scaling:** Scaling the Walsh rank $k$ from 32 to 128 in the d=256 series achieves a massive **-0.2431** drop in validation loss with only a **+0.9%** parameter increase. In a traditional dense model, achieving this would require expanding the hidden dimension, resulting in a 300% - 400% parameter footprint growth.
-* **Expression Saturation:** At d=512, increasing the Walsh rank from k=64 to k=128 yields a minor quantitative drop (0.0272) but shows a dramatic qualitative improvement in syntactic and logical cohesion (grammar, markdown lists, conversational structures), proving that Walsh cores directly encode logical/structural intelligence.
-
-## Milestone: V11 Fourier-ALBERT Architecture Completed & Verified
-We have successfully implemented and verified the **V11 Fourier-ALBERT** (Fourier-backed All-Block Parameter Sharing) architecture, establishing a new record in parameter efficiency for local sovereign models.
-
-### 1. Compression and Architecture Highlights (d=512, E=128, k=128)
-* **Parameter Footprint:** Compressed the 33.76M baseline (`spectral_v10`) down to **4.36M parameters** (`spectral_v11`).
-* **Compression Rate:** **87.09% parameter reduction** while retaining high-dimensional representational capacity ($d=512$, $k=128$).
-* **Core Innovations:**
-  * *Factorized Embeddings:* Decoupled input size ($E=128$) from hidden representation ($d=512$).
-  * *Spherical Weight Tying:* Strict weight-sharing between input embeddings and output head.
-  * *Cross-Layer Sharing:* Entire block loop sequential iteration across 6 layers, keeping isolated virtual layer Fourier memory states.
-  * *Spherical Normalization Constraints:* Fully preserved nGPT's spherical vector norms on the factorized projections.
-
-### 2. Empirical Verification
-* **Dimension Check:** Forward pass is fully functional, producing correct logits shape `(Batch, SeqLen, 32768)` without any NaNs or numerical degradation.
-* **Warmup Smoke Test:** Successfully executed 10 training iterations. Model loss decreased smoothly (from `10.81` down to `9.85`).
-* **Logging System Enhancements:** The training logs now output the exact execution CLI command in the first line and the YAML configuration path in the headers.
-
-### 3. Empirical Results (Pre-training Grid Search for Heavy-Weight Configs)
-All models pre-trained for 2000 iterations on CPU (constant LR=0.015, context length 1024, batch size 16):
-* `v11_e256_d1024_k256_l6` (Run 1: 9.05M parameters): Best Val Loss = **4.3282**
-* `v11_e256_d2048_k256_l6` (Run 3: 9.57M parameters): Best Val Loss = **4.2145** (Completed in ~35 hours)
-* `v11_e256_d2048_k512_l8` (Run 4: 9.97M parameters): Best Val Loss = **4.1600** (Completed in ~45.4 hours)
-* `v11_e256_d1024_k512_l8` (Run 2: 9.44M parameters): Best Val Loss = **4.1287** (**The Absolute V11 Sovereign Champion!**)
-
-### 4. Core V11 Discoveries
-* **The Width-vs-Depth Efficiency Paradox:** Doubling representation space width to $d=2048$ (Run 3) provides a solid loss improvement over $d=1024$ (Run 1). However, it **fails to match** the performance of the deeper and higher-rank model of Run 2 ($d=1024, k=512, l=8$), which has fewer parameters (9.44M vs 9.57M). This proves that structural routing and transformation complexity (depth/rank) are substantially more parameter-efficient than raw embedding width.
-* **Virtual Recurrence Basin:** Increasing virtual block sharing layers to $l=8$ combined with higher logical Walsh rank $k=512$ provides a highly stable convergence path, eliminating the late-stage parameter oscillation observed in the $l=6$ baseline.
-* **Matrix-Free Zero Overhead Scaling:** Quadrupling the Walsh logical operations from $k=256$ to $k=512$ incurs absolutely zero extra computational overhead on baseline widths. However, at $d=2048$ and $k=512$ (Run 4), the dynamic synthesis of WalshLinear weights becomes a FLOPs bottleneck on CPU threads, highlighting the importance of GPU tensor cores for extreme dimension scaling.
-* **Hardware-Level DirectML Boundary:** Verified that local training on integrated AMD APUs via PyTorch DirectML (`--device dml`) is blocked by a lack of GPU-level complex-number (`ComplexFloat`) support in DirectX 12. This makes Zen 4's AVX-512 CPU execution an architectural necessity for our Fourier stateful memory model.
-* **Qualitative Grammar and Factual Anchors:** Despite having under 10M parameters, the model successfully synthesized complex programming structures (`def`, `return`, `elif`) and showed highly detailed associative geographic representations (correct French communes and departments).
-
-## Next Steps
-1. **Transition to SFT Fine-Tuning Phase:** Take the sovereign model checkpoint (`checkpoints/test_v11_e256_d1024_k512_l8/ckpt_pretrain_best.pt`) and initiate Supervised Fine-Tuning (SFT) using the multi-level reasoning curriculum (`data/tool_dataset_real.json`).
-2. **Context Extension Benchmark:** Run evaluations on stateful Fourier memory scaling up to 4096 tokens.
+2. **COGA (El Salto al Sistema):** Internalization of SOMA. Transition to a Mutable Scratchpad and Dynamic Recurrence within the inference engine.
+3. **Attention Neuron (The Atomic Level):** Discovery of Spectral Cores (DCT/Walsh), Complex Phase Phasors, and $O(N)$ Matrix Delta Holographic Memory (V298/V299).
+4. **TinyThinker Delta-Phase TCA (The Final Synthesis):** A Matrix-Free LLM with $O(N)$ complex phase memory and causal $k=4$ depthwise convolutions for infinite context and high-density associative recall on local hardware.
 
 ---
-*Document generated by TinyThinker Architect. Efficiency is the only path to Sovereign AI.*
+
+## Milestone: V11 Fourier-ALBERT Architecture Completed & Verified
+* **Champion Config (`v11_e256_d1024_k512_l8` Run 2):** Best Val Loss = **4.1287** (9.44M params, constant LR=0.015).
+* **Key Discoveries:**
+  - *Virtual Block Sharing (ALBERT-style):* 8 virtual layers sharing weights acts as a strong regularizer that stabilizes training at high learning rates (0.015).
+  - *Logical Walsh Rank ($k=512$):* High-rank spectral cores encode complex syntactic/logical structures without expanding parameter count.
+
+---
+
+## Milestone: Run Serio A (`serious_v1`) Completed & Diagnostic
+Completed 2000 iterations on July 21, 2026 (`logs/serious_v1.log`).
+
+### 1. Empirical Results (`serious_v1`)
+* **Config:** `UnifiedSpectral` (hippo OFF, spherical OFF, FFN denso `use_fwht_kernel=False`, weight_tying ON).
+* **Hyperparams:** `dim=2048`, `emb_dim=256`, `n_layers=8`, `k_walsh=256`, `vocab=32768`, `seq_len=1024`, `batch=8`, `lr=1e-3` (cosine decay to 1e-4).
+* **Final Val Loss @2000:** **7.1373** (train_loss 6.3493).
+
+### 2. Diagnostic & Lessons Learned
+* **Learning Rate Sensitivity:** `serious_v1` used LR=1e-3 (decaying to 1e-4), which is 15x lower than V11 (LR=0.015). Spectral and phase architectures are extremely sensitive to LR; a conservative LR severely stalls convergence.
+* **Rank ($k=256$ vs $k=512$):** $k=256$ limited the transformation capacity relative to V11's $k=512$.
+* **Missing Write-Erasure Operator:** Both V11 and `serious_v1` relied on additive spectral accumulation without an explicit Delta Rule erasure operator, causing crosstalk noise over long contexts.
+
+---
+
+## Milestone: Breakthrough Transfer from Attention-Neuron (V298/V299)
+Empirical breakthroughs in `attention-neuron` (July 21-22, 2026) solved the linear memory crosstalk limit:
+
+1. **Matrix Delta Rule in Complex Phase (`DeltaPhaseHolographic` $O(N)$):**
+   Updates memory via residual error signal: $M_t = M_{t-1} + \frac{\beta}{d_k} (e_t \otimes K_t)$, where $e_t = V_t - \text{Re}(M \bar{K}_t)/d_k$.
+   Achieved **99.95% MQAR recall accuracy** in $O(N)$ time and memory.
+2. **Iso-Floats Capacity Frontier (V299):**
+   Under identical state memory budget (~2,048 floats/head), Complex Phase Delta Memory maintains **95.98% accuracy at 64 KV pairs ($L=512$)**, while Real-Valued DeltaNet Vanilla collapses to **73.14%** (+22.84% superiority for complex phase).
+3. **Short Causal Conv1D ($k=4$):**
+   Local depthwise convolution pairs Key-Value tokens before memory injection, enabling seamless sequence learning.
+
+---
+
+## Next Steps (Transition to V12 Delta-Phase)
+1. **Benchmark C++/PyTorch Kernel for Delta-Phase Inference:** Develop and benchmark an optimized fused C++/PyTorch kernel for the complex phase matrix Delta Rule scan ($O(1)$ streaming memory).
+2. **Build V12 Architecture (`model_spectral_v12_delta_phase.py`):** Integrate Short Causal Conv1D ($k=4$) + Complex Phase Delta Memory ($O(N)$) + Factorized Embeddings/Weight Tying.
+3. **Pre-training Run V12:** Train V12 with LR sweep (0.005 to 0.015) to break V11's 4.12 val_loss barrier.
+
+---
+*Document updated by TinyThinker Architect. Efficiency and phase memory are the path to Sovereign AI.*
