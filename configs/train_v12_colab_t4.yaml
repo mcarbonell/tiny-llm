@@ -1,6 +1,6 @@
 arch: spectral_v12
-data_path: data/train_v2_32k.bin
-tokenizer_path: model/tokenizer_v2_32k.json
+data_path: data/train.bin
+tokenizer_path: model/tokenizer.json
 batch_size: 16
 seq_len: 1024
 grad_accum_steps: 2
@@ -10,7 +10,7 @@ learning_rate: 0.008
 min_lr: 0.0008
 n_layers: 8
 n_heads: 8
-vocab_size: 32768
+vocab_size: 16384
 dim: 1024
 emb_dim: 256
 chunk_size: 128

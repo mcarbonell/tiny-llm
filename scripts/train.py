@@ -226,7 +226,18 @@ def main():
     # ----------------------------------
     data_path = getattr(args_cli, 'data_path', DEFAULT_DATA_PATH)
     if not os.path.exists(data_path):
-        raise FileNotFoundError(f"Falta el dataset: {data_path}")
+        # Fallback a train.bin o train_v1.bin si existe
+        dir_name = os.path.dirname(data_path) or "data"
+        fallbacks = [os.path.join(dir_name, "train.bin"), os.path.join(dir_name, "train_v1.bin")]
+        found_fallback = False
+        for fb in fallbacks:
+            if os.path.exists(fb):
+                t_print(f"⚠️ Dataset '{data_path}' no encontrado. Usando dataset existente: '{fb}'")
+                data_path = fb
+                found_fallback = True
+                break
+        if not found_fallback:
+            raise FileNotFoundError(f"Falta el dataset: {data_path}")
     
     full_data = np.memmap(data_path, dtype=np.uint16, mode='r')
     val_fraction = 0.05
