@@ -184,20 +184,24 @@ def main():
 
     # 1. Configuración de Hardware
     # ----------------------------------
-    device_name = args_cli.device
+    device_name = getattr(args_cli, 'device', 'cpu')
     device = 'cpu'
     
     if device_name == 'dml':
         try:
             import torch_directml
             device = torch_directml.device()
-            print(f"[Hardware] Usando DirectML (GPU AMD)")
+            t_print(f"[Hardware] Usando DirectML (GPU AMD)")
         except ImportError:
-            print("[Warning] DirectML no instalado, usando CPU.")
-    elif device_name == 'cuda' and torch.cuda.is_available():
+            t_print("[Warning] DirectML no instalado, usando CPU.")
+    elif torch.cuda.is_available():
         device = 'cuda'
+        t_print(f"[Hardware] Detectada GPU CUDA activa ({torch.cuda.get_device_name(0)})")
     elif device_name == 'mps' and getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
         device = 'mps'
+        t_print(f"[Hardware] Usando Apple MPS")
+    else:
+        t_print(f"[Hardware] Usando dispositivo: {device}")
     
     # Setup de Precisión Mixta (AMP)
     _is_dml = str(device).startswith('dml') or 'privateuseone' in str(device)

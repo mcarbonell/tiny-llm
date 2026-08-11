@@ -18,4 +18,5 @@ conv_kernel_size: 4
 spherical_head: false
 weight_tying: true
 optimizer: adamw
+device: cuda
 checkpoint_dir: /content/drive/MyDrive/tiny-thinker/checkpoints/v12_delta_phase
