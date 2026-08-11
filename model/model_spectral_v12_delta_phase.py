@@ -1,8 +1,8 @@
 """
 model_spectral_v12_delta_phase.py
 ==================================
-TinyThinker Architecture V12 (Upgraded with V328 Spectral Breakthroughs):
-  1. Delta-Phase Holographic Memory LLM in O(N) with JIT Fast Chunk Scan.
+TinyThinker Architecture V12 (Parallel Chunkwise Delta-Phase + V328 Spectral Lerp FFN):
+  1. Matrix-Parallel Chunkwise Delta-Phase Memory in O(N) using Parallel Householder Inversion (v300/v305).
   2. Learnable Substrate Lerp FFN (FWHT + DCT-II + DWT Haar Wavelet).
   3. Short Causal Conv1D (k=4) + Factorized Embeddings/Weight Tying.
 """
@@ -12,7 +12,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from dataclasses import dataclass
-from torch.utils.checkpoint import checkpoint
 
 @dataclass
 class SpectralArgsV12:
@@ -22,7 +21,7 @@ class SpectralArgsV12:
     n_heads: int = 8          # Number of phase memory heads
     vocab_size: int = 32768
     max_seq_len: int = 1024
-    chunk_size: int = 128     # Chunk size for autograd memory optimization
+    chunk_size: int = 64      # Parallel matrix chunk size (C=64)
     conv_kernel_size: int = 4
     num_banks: int = 4        # Multi-frequency banks per spectral FFN
     spherical_head: bool = False
@@ -43,7 +42,7 @@ class SphericalHead(nn.Module):
         return F.linear(x_norm, w_norm) * self.tau
 
 class ShortCausalConv1D(nn.Module):
-    """Depthwise 1D Causal Convolution (kernel_size=4)"""
+    """Depthwise 1D Causal Convolution (kernel_size=4) for local token binding"""
     def __init__(self, d_model, kernel_size=4):
         super().__init__()
         self.kernel_size = kernel_size
@@ -97,7 +96,7 @@ def create_haar_matrix(n: int) -> torch.Tensor:
 # --- FFN Espectral Lerp Router (V328 Breakthrough) ---
 
 class LearnableSubstrateLerpFFN(nn.Module):
-    """FFN con router Softmax Lerp aprendible entre FWHT, DCT-II y DWT Haar"""
+    """FFN con router Softmax Lerp aprendible entre FWHT, DCT-II y DWT Haar (Vectorizado)"""
     def __init__(self, d_model: int, num_banks: int = 4):
         super().__init__()
         self.d_model = d_model
@@ -153,55 +152,12 @@ class LearnableSubstrateLerpFFN(nn.Module):
         probs = F.softmax(self.substrate_logits, dim=0)
         return probs[0].item(), probs[1].item(), probs[2].item()
 
-# --- JIT Fast Chunk Scan Helper ---
-
-def _scan_chunk(
-    K_c: torch.Tensor,
-    Q_c: torch.Tensor,
-    v_c: torch.Tensor,
-    beta_c: torch.Tensor,
-    lam_c: torch.Tensor,
-    M_init: torch.Tensor,
-    inv_dk: float
-):
-    """
-    Fast Chunked Sequential Delta-Phase Memory Scan.
-    K_c, Q_c: (B, C, H, d_k) complex64
-    v_c: (B, C, H, d_k) float32
-    beta_c, lam_c: (B, C, H, 1, 1) float32
-    M_init: (B, H, d_k, d_k) complex64
-    """
-    B, C, H, dk = K_c.shape
-    M = M_init
-    out_list = []
-    
-    for t in range(C):
-        k_t = K_c[:, t]
-        q_t = Q_c[:, t]
-        v_t = v_c[:, t]
-        beta_t = beta_c[:, t]
-        lam_t = lam_c[:, t]
-        
-        k_conj = torch.conj(k_t)
-        q_conj = torch.conj(q_t)
-        
-        # 1. Readout prediction
-        v_old = torch.matmul(M, k_conj.unsqueeze(-1)).squeeze(-1).real
-        err = v_t - v_old
-        
-        # 2. Bounded decay update
-        update = torch.matmul(err.to(torch.complex64).unsqueeze(-1), k_t.unsqueeze(-2))
-        M = lam_t * M + (beta_t * inv_dk) * update
-        
-        # 3. Query readout
-        ret = torch.matmul(M, q_conj.unsqueeze(-1)).squeeze(-1).real
-        out_list.append(ret)
-        
-    retrieved_chunk = torch.stack(out_list, dim=1) # [B, C, H, d_k]
-    return retrieved_chunk, M
-
 class DeltaPhaseHolographicBlockV12(nn.Module):
-    def __init__(self, d_model, n_heads=8, conv_kernel_size=4, chunk_size=128, num_banks=4):
+    """
+    Parallel Chunkwise Complex Delta-Phase Memory Layer (v300/v305).
+    Computes intra-chunk transitions and outputs via parallel GPU matmuls.
+    """
+    def __init__(self, d_model, n_heads=8, conv_kernel_size=4, chunk_size=64, num_banks=4):
         super().__init__()
         self.d_model = d_model
         self.n_heads = n_heads
@@ -218,10 +174,8 @@ class DeltaPhaseHolographicBlockV12(nn.Module):
         self.w_q = nn.Linear(d_model, d_model)
         self.w_v = nn.Linear(d_model, d_model)
         self.w_beta = nn.Linear(d_model, n_heads)
-        self.w_lambda = nn.Linear(d_model, n_heads)
         
         self.out_proj = nn.Linear(d_model, d_model)
-        # FFN Espectral Lerp Router
         self.ffn = LearnableSubstrateLerpFFN(d_model, num_banks=num_banks)
 
     def forward(self, x, memory_state=None):
@@ -229,54 +183,61 @@ class DeltaPhaseHolographicBlockV12(nn.Module):
         normed = self.norm1(x)
         conv_x = self.causal_conv(normed)
         B, L, D = conv_x.shape
-        
-        theta_k = self.w_k(conv_x).view(B, L, self.n_heads, self.d_k)
-        theta_q = self.w_q(conv_x).view(B, L, self.n_heads, self.d_k)
-        v = self.w_v(conv_x).view(B, L, self.n_heads, self.d_k)
-        beta = torch.sigmoid(self.w_beta(conv_x)).view(B, L, self.n_heads, 1, 1)
-        lam = (0.85 + 0.149 * torch.sigmoid(self.w_lambda(conv_x))).view(B, L, self.n_heads, 1, 1)
+        C = self.chunk_size
+        inv_dk = self.inv_dk
+
+        pad_len = (C - (L % C)) % C
+        if pad_len > 0:
+            conv_x = F.pad(conv_x, (0, 0, 0, pad_len))
+            L_padded = L + pad_len
+        else:
+            L_padded = L
+
+        theta_k = self.w_k(conv_x).view(B, L_padded, self.n_heads, self.d_k).transpose(1, 2)
+        theta_q = self.w_q(conv_x).view(B, L_padded, self.n_heads, self.d_k).transpose(1, 2)
+        v = self.w_v(conv_x).view(B, L_padded, self.n_heads, self.d_k).transpose(1, 2)
+        beta = torch.sigmoid(self.w_beta(conv_x)).transpose(1, 2)
         
         theta_k_f = theta_k.float()
         theta_q_f = theta_q.float()
         K = torch.complex(torch.cos(theta_k_f), torch.sin(theta_k_f))
         Q = torch.complex(torch.cos(theta_q_f), torch.sin(theta_q_f))
-        
+
+        num_chunks = L_padded // C
+        Q_c = Q.view(B, self.n_heads, num_chunks, C, self.d_k)
+        K_c = K.view(B, self.n_heads, num_chunks, C, self.d_k)
+        V_c = v.view(B, self.n_heads, num_chunks, C, self.d_k)
+        beta_c = beta.view(B, self.n_heads, num_chunks, C)
+
+        # 1. Matmuls paralelos intra-chunk para Gram y Matriz de Transición Triangular T_mat
+        Gram_real = torch.matmul(K_c, torch.conj(K_c).transpose(-1, -2)).real * inv_dk
+        L_mat = torch.triu(Gram_real * beta_c.unsqueeze(-1), diagonal=1)
+        I_mat = torch.eye(C, device=x.device).view(1, 1, 1, C, C)
+        T_mat = torch.linalg.inv(I_mat + L_mat.transpose(-1, -2))
+
+        # 2. Inter-chunk scan (SOLO num_chunks iteraciones en lugar de L iteraciones token a token)
         if memory_state is None:
-            M = torch.zeros(B, self.n_heads, self.d_k, self.d_k, dtype=torch.complex64, device=x.device)
+            M_state = torch.zeros(B, self.n_heads, self.d_k, self.d_k, dtype=torch.complex64, device=x.device)
         else:
-            M = memory_state
-            
-        chunk_size = self.chunk_size
-        num_chunks = max(1, L // chunk_size)
-        retrieved_chunks = []
-        
+            M_state = memory_state
+
+        out_chunks = []
         for c in range(num_chunks):
-            start = c * chunk_size
-            end = min((c + 1) * chunk_size, L)
-            
-            K_c = K[:, start:end]
-            Q_c = Q[:, start:end]
-            v_c = v[:, start:end]
-            beta_c = beta[:, start:end]
-            lam_c = lam[:, start:end]
-            
-            if self.training:
-                ret_c, M = checkpoint(
-                    _scan_chunk,
-                    K_c, Q_c, v_c, beta_c, lam_c, M, self.inv_dk,
-                    use_reentrant=False
-                )
-            else:
-                ret_c, M = _scan_chunk(K_c, Q_c, v_c, beta_c, lam_c, M, self.inv_dk)
-                
-            retrieved_chunks.append(ret_c)
-            
-        retrieved = torch.cat(retrieved_chunks, dim=1).view(B, L, D)
+            qc, kc, vc, bc, tc = Q_c[:, :, c], K_c[:, :, c], V_c[:, :, c], beta_c[:, :, c], T_mat[:, :, c]
+            v_old = torch.matmul(M_state, torch.conj(kc).transpose(-1, -2)).real.transpose(-1, -2) * inv_dk
+            E_c = torch.matmul(tc, vc - v_old)
+            U_c = bc.unsqueeze(-1) * E_c
+            o_inter = torch.matmul(M_state, torch.conj(qc).transpose(-1, -2)).real.transpose(-1, -2) * inv_dk
+            A_intra = torch.tril(torch.matmul(qc, torch.conj(kc).transpose(-1, -2)).real) * inv_dk
+            out_chunks.append(torch.matmul(A_intra, U_c) + o_inter)
+            M_state = M_state + torch.matmul(U_c.to(torch.complex64).transpose(-1, -2), kc)
+
+        retrieved = torch.cat(out_chunks, dim=2)[:, :, :L].transpose(1, 2).reshape(B, L, D)
         retrieved_norm = self.norm_retrieved(retrieved)
-        
+
         x = res + self.out_proj(retrieved_norm)
         x = x + self.ffn(self.norm2(x))
-        return x, M
+        return x, M_state
 
 class SpectralThinkerV12(nn.Module):
     def __init__(self, args: SpectralArgsV12):
