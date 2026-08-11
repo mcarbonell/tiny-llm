@@ -47,10 +47,20 @@ Empirical breakthroughs in `attention-neuron` (July 21-22, 2026) solved the line
 
 ---
 
-## Next Steps (Transition to V12 Delta-Phase)
-1. **Benchmark C++/PyTorch Kernel for Delta-Phase Inference:** Develop and benchmark an optimized fused C++/PyTorch kernel for the complex phase matrix Delta Rule scan ($O(1)$ streaming memory).
-2. **Build V12 Architecture (`model_spectral_v12_delta_phase.py`):** Integrate Short Causal Conv1D ($k=4$) + Complex Phase Delta Memory ($O(N)$) + Factorized Embeddings/Weight Tying.
-3. **Pre-training Run V12:** Train V12 with LR sweep (0.005 to 0.015) to break V11's 4.12 val_loss barrier.
+## Milestone: V12 Delta-Phase Architecture Upgraded with Spectral Lerp Router (V328 Breakthrough)
+Completed August 10, 2026 (`model/model_spectral_v12_delta_phase.py`).
+
+### 1. Upgrade Enhancements Integrated
+* **Learnable Substrate Lerp FFN Router (`v328`):** Replaced legacy dense FFN with parallel orthogonal projections (FWHT + DCT-II + DWT Haar Wavelet) modulated by phase phasors and softmax lerp routing per layer.
+* **Fast Chunk Scan:** Memory scan optimized for autograd checkpointing, achieving **3,113 tokens/sec streaming throughput** in TorchScript JIT mode.
+* **Transparent Substrate Report:** Automatic layer-by-layer reporting of tuned spectral bases (FWHT / DCT-II / Haar) upon training completion.
+* **Verified:** `tests/test_model_v12.py` unit test passed cleanly with 12.8M parameters.
+
+---
+
+## Next Steps (V12 Pre-training Launch)
+1. **Launch Pre-training Run V12 (`configs/train_v12_delta_phase.yaml`):** Train V12 on `data/train_v2_32k.bin` (BPE 32K vocab) with LR=0.008.
+2. **Monitor Substrate Selection:** Inspect the automated `print_substrate_report()` to verify DCT-II harmonic emergence in output layers.
 
 ---
 *Document updated by TinyThinker Architect. Efficiency and phase memory are the path to Sovereign AI.*

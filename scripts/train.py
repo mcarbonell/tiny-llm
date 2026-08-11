@@ -788,6 +788,10 @@ TOTAL PARAMS: {total_params / 1e6:.2f}M
                     pass
 
         iter_num += 1
+    
+    if hasattr(model, 'print_substrate_report'):
+        model.print_substrate_report()
+        
     t_print("Entrenamiento completado exitosamente.")
 
 if __name__ == "__main__":
