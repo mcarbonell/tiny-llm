@@ -1,9 +1,9 @@
 arch: spectral_v12
 data_path: data/train.bin
 tokenizer_path: model/tokenizer.json
-batch_size: 16
+batch_size: 4
 seq_len: 1024
-grad_accum_steps: 2
+grad_accum_steps: 8
 max_iters: 2000
 warmup_iters: 50
 learning_rate: 0.008

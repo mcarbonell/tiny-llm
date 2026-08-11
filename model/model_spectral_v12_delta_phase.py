@@ -128,20 +128,23 @@ class LearnableSubstrateLerpFFN(nn.Module):
     def forward(self, x):
         weights = F.softmax(self.substrate_logits, dim=0)
         
-        # 1. Rama FWHT
-        h_fwht = F.linear(x, self.mat_fwht)
-        outs_fwht = [torch.cos(h_fwht + self.phi1_fwht[b]) * self.w1_fwht[b] + torch.sin(h_fwht + self.phi2_fwht[b]) * self.w2_fwht[b] for b in range(self.num_banks)]
-        out_fwht = F.linear(self.combine(torch.cat(outs_fwht, dim=-1)), self.mat_fwht.t())
+        # 1. Rama FWHT (Vectorizada con broadcasting)
+        h_fwht = F.linear(x, self.mat_fwht).unsqueeze(-2)
+        outs_fwht = (torch.cos(h_fwht + self.phi1_fwht) * self.w1_fwht + 
+                     torch.sin(h_fwht + self.phi2_fwht) * self.w2_fwht).flatten(-2)
+        out_fwht = F.linear(self.combine(outs_fwht), self.mat_fwht.t())
         
-        # 2. Rama DCT-II
-        h_dct = F.linear(x, self.mat_dct)
-        outs_dct = [torch.cos(h_dct + self.phi1_dct[b]) * self.w1_dct[b] + torch.sin(h_dct + self.phi2_dct[b]) * self.w2_dct[b] for b in range(self.num_banks)]
-        out_dct = F.linear(self.combine(torch.cat(outs_dct, dim=-1)), self.mat_dct.t())
+        # 2. Rama DCT-II (Vectorizada con broadcasting)
+        h_dct = F.linear(x, self.mat_dct).unsqueeze(-2)
+        outs_dct = (torch.cos(h_dct + self.phi1_dct) * self.w1_dct + 
+                    torch.sin(h_dct + self.phi2_dct) * self.w2_dct).flatten(-2)
+        out_dct = F.linear(self.combine(outs_dct), self.mat_dct.t())
         
-        # 3. Rama DWT Haar
-        h_haar = F.linear(x, self.mat_haar)
-        outs_haar = [torch.cos(h_haar + self.phi1_haar[b]) * self.w1_haar[b] + torch.sin(h_haar + self.phi2_haar[b]) * self.w2_haar[b] for b in range(self.num_banks)]
-        out_haar = F.linear(self.combine(torch.cat(outs_haar, dim=-1)), self.mat_haar.t())
+        # 3. Rama DWT Haar (Vectorizada con broadcasting)
+        h_haar = F.linear(x, self.mat_haar).unsqueeze(-2)
+        outs_haar = (torch.cos(h_haar + self.phi1_haar) * self.w1_haar + 
+                     torch.sin(h_haar + self.phi2_haar) * self.w2_haar).flatten(-2)
+        out_haar = F.linear(self.combine(outs_haar), self.mat_haar.t())
         
         # Combinación Lerp Convexa
         return weights[0] * out_fwht + weights[1] * out_dct + weights[2] * out_haar
