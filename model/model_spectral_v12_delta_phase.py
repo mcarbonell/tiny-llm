@@ -233,8 +233,10 @@ class DeltaPhaseHolographicBlockV12(nn.Module):
         beta = torch.sigmoid(self.w_beta(conv_x)).view(B, L, self.n_heads, 1, 1)
         lam = (0.85 + 0.149 * torch.sigmoid(self.w_lambda(conv_x))).view(B, L, self.n_heads, 1, 1)
         
-        K = torch.polar(torch.ones_like(theta_k), theta_k)
-        Q = torch.polar(torch.ones_like(theta_q), theta_q)
+        theta_k_f = theta_k.float()
+        theta_q_f = theta_q.float()
+        K = torch.complex(torch.cos(theta_k_f), torch.sin(theta_k_f))
+        Q = torch.complex(torch.cos(theta_q_f), torch.sin(theta_q_f))
         
         if memory_state is None:
             M = torch.zeros(B, self.n_heads, self.d_k, self.d_k, dtype=torch.complex64, device=x.device)
