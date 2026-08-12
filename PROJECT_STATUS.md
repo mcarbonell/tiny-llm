@@ -28,8 +28,13 @@ This project is the culmination of a fractal evolution of sovereign algorithms:
 
 ### 2. Google Colab Active Pre-training Run
 * **Hardware:** GPU Tesla T4 CUDA (15.3 GB VRAM, active consumption ~3.6 GB).
-* **Config:** `configs/train_v12_colab_t4.yaml` (72.41M params, `dim=1024`, `n_layers=8`, `n_heads=8`, `vocab_size=16384`, `batch_size=4`, `grad_accum_steps=8`, 32,768 tokens/iter).
-* **Status:** Active pre-training in progress. Loss dropping rapidly from initial entropy $\ln(16384) \approx 9.72 \rightarrow 7.40 \rightarrow 6.19$, with automatic safety backups saved to Google Drive.
+* **Config:** `configs/train_v12_colab_t4.yaml` (72.41M params, `dim=1024`, `n_layers=8`, `n_heads=8`, `vocab_size=16384`, `batch_size=4`, `grad_accum_steps=8`, 32,768 tokens/iter, `learning_rate=0.0004`).
+* **Status:** Pre-entrenamiento activo en progreso. Pérdida descendiendo con extrema velocidad y estabilidad:
+  - Iter 0: `9.7239` ($\text{Entropía inicial } \ln(16384)$)
+  - Iter 30: `5.9860` (lr `2.40e-04`)
+  - Iter 50: `4.9053` (lr `4.00e-04` - Fin de warmup)
+  - Iter 60: `4.5655` (lr `4.00e-04`)
+  - **Iter 70: `4.0663`** (lr `4.00e-04`, desplome ultra-rápido hacia el régimen de perplejidad fina).
 
 ---
 
