@@ -6,7 +6,7 @@ seq_len: 1024
 grad_accum_steps: 8
 max_iters: 2000
 warmup_iters: 50
-learning_rate: 0.008
+learning_rate: 0.0004
 min_lr: 0.0008
 n_layers: 8
 n_heads: 8

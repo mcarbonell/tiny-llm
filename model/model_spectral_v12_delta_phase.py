@@ -197,6 +197,10 @@ class DeltaPhaseHolographicBlockV12(nn.Module):
         theta_q = self.w_q(conv_x).view(B, L_padded, self.n_heads, self.d_k).transpose(1, 2)
         v = self.w_v(conv_x).view(B, L_padded, self.n_heads, self.d_k).transpose(1, 2)
         beta = torch.sigmoid(self.w_beta(conv_x)).transpose(1, 2)
+        if pad_len > 0:
+            mask = torch.ones(B, self.n_heads, L_padded, device=x.device)
+            mask[:, :, L:] = 0.0
+            beta = beta * mask
         
         theta_k_f = theta_k.float()
         theta_q_f = theta_q.float()
