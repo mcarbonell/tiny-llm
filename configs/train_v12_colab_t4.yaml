@@ -7,7 +7,7 @@ grad_accum_steps: 8
 max_iters: 2000
 warmup_iters: 50
 learning_rate: 0.0004
-min_lr: 0.0008
+min_lr: 0.00001
 n_layers: 8
 n_heads: 8
 vocab_size: 16384
