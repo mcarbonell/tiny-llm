@@ -1,20 +1,25 @@
 # 🧠 TinyThinker (LLM Lógico Minimalista)
 
-![Status](https://img.shields.io/badge/Status-Fase_1_Entrenando-blue?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Fase_1_Validacion_v12_En_Progreso-brightgreen?style=for-the-badge)
 ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
-![Params](https://img.shields.io/badge/Params-12.46M_(pretraining)-lightgrey?style=for-the-badge)
+![Params](https://img.shields.io/badge/Params-72.41M_(v12_Delta--Phase)-blue?style=for-the-badge)
 
-Un experimento educativo para construir, entrenar y evaluar un Modelo de Lenguaje Pequeño/Grande experimental completamente desde cero usando PyTorch. El modelo de **pre-entrenamiento actual tiene 12.46M parámetros** (dim=256, 6 capas), escala pensada para validar el pipeline en CPU local. El objetivo final es escalar a **100M–300M parámetros** en entorno cloud.
+Un experimento educativo para construir, entrenar y evaluar un Modelo de Lenguaje Pequeño/Grande experimental completamente desde cero usando PyTorch. La arquitectura actual **v12 Delta-Phase tiene 72.41M parámetros** (`dim=1024`, 8 capas, 8 cabezas) integrada con memoria matricial de fase compleja $O(N)$ y routers espectrales. El modelo se encuentra actualmente en **fase de pre-entrenamiento y validación cuantitativa activa en GPU Cloud (Google Colab Tesla T4)**.
+
+> [!IMPORTANT]
+> **Estado de Validación Actual (Resultados Provisionales):**
+> * **Pérdida & Perplejidad Cuantitativa:** En la iteración 270/2000 (14.5% del presupuesto), la pérdida se ha reducido de `9.7279` nats ($PPL = 16,779$) a **`2.5184` nats ($PPL = 12.41$)**, alcanzando un checkpoint de validación de **`2.8486` nats ($PPL = 17.26$)** sin sobreajuste.
+> * **Próximo Paso:** Estos resultados son **provisionales**. La generación de muestras de texto (*text sampling*) y la evaluación cualitativa se realizarán tras completar el entrenamiento o muestrear el checkpoint guardado.
 
 El modelo se basa en la filosofía de **"Cerebro Pequeño, Lógica Fuerte"**, donde el razonamiento (*Chain of Thought*) prevalece sobre el almacenamiento masivo de datos factuales, apoyándose en la externalización de conocimientos usando la herramienta autónoma de búsqueda **(Tool-calling)**.
 
-## ✨ Características Técnicas (Modernizadas)
+## ✨ Características Técnicas (v12 Delta-Phase)
 En lugar de basarnos en el viejo paper de 2017, la arquitectura del Transformer se basa en los avances punta actuales:
+- **Complejo Phase Delta Memory ($O(N)$):** Actualizaciones matriciales de fase en $S^1 \subset \mathbb{C}^{d_k \times d_k}$ para un recuerdo asociativo ultra-denso sin colapso de norma.
+- **Routers Espectrales Substrate Lerp FFN:** Combinación ortogonal ortogonalizada (FWHT + DCT-II + Haar DWT) con ahorro masivo de parámetros.
 - **RoPE (Rotary Position Embeddings):** Mejor extrapolación contextual.
-- **SwiGLU:** Activaciones neuronales más densas en las capas ocultas (estilo LLaMa).
-- **RMSNorm:** Mayor control, estabilidad temporal y rendimiento puro.
-- **Grouped-Query Attention (GQA):** Reducción drástica del caché de Key/Value, ideal para correr las inferencias rápidamente en CPU locales.
-- **Acumulación de Gradientes & Precisión Mixta:** Maximización de hardware modesto a través de tensores *BFloat16*.
+- **RMSNorm & Causal Conv1D:** Estabilidad temporal y enrutamiento causal rápido en tensores.
+
 
 ## 🚀 Fases del Proyecto
 1. **Fase 1 - Adquisición del Lenguaje:** Pre-entrenamiento inicial con datasets limpios focalizados (como `TinyStories`) para que la red adquiera gramática impecable sin intoxicarse.
