@@ -17,9 +17,10 @@ from model.model_analog import TinyThinkerAnalog, AnalogArgs
 from model.model_auto_analog import TinyThinkerAutoAnalog, AutoAnalogArgs
 from model.model_spectral_v10_hippocampus import SpectralThinkerV10, SpectralArgsV10
 from model.model_spectral_v11_albert import SpectralThinkerV11, SpectralArgsV11
+from model.model_spectral_v12_delta_phase import SpectralThinkerV12, SpectralArgsV12
 
 def load_checkpoint(ckpt_path, device='cpu'):
-    torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, AnalogArgs, AutoAnalogArgs, SpectralArgsV10, SpectralArgsV11])
+    torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, CogaSpectralArgs, AnalogArgs, AutoAnalogArgs, SpectralArgsV10, SpectralArgsV11, SpectralArgsV12])
     checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
     args = checkpoint['args']
     arch = checkpoint.get('arch', 'dense')
@@ -46,6 +47,8 @@ def load_checkpoint(ckpt_path, device='cpu'):
         model = SpectralThinkerV10(args)
     elif arch == 'spectral_v11':
         model = SpectralThinkerV11(args)
+    elif arch == 'spectral_v12':
+        model = SpectralThinkerV12(args)
     else:
         raise ValueError(f"Unknown architecture: {arch}")
 
@@ -69,8 +72,11 @@ def generate_text(model, tokenizer, prompt, max_tokens=100, temperature=0.7, top
     with torch.no_grad():
         logits, past_key_values = None, None
         for step in range(max_tokens):
-            # Para V10, necesitamos rellenar a múltiplos de chunk_size (256)
-            if hasattr(model, 'args') and hasattr(model.args, 'chunk_size'):
+            if isinstance(model, SpectralThinkerV12):
+                out = model(x)
+                logits_out = out[0] if isinstance(out, tuple) else out
+                logits_step = logits_out[:, -1, :] / temperature
+            elif hasattr(model, 'args') and hasattr(model.args, 'chunk_size') and getattr(model.args, 'arch', '') == 'spectral_v10':
                 chunk_size = model.args.chunk_size
                 seq_len = x.size(1)
                 pad_len = (chunk_size - (seq_len % chunk_size)) % chunk_size
@@ -80,7 +86,6 @@ def generate_text(model, tokenizer, prompt, max_tokens=100, temperature=0.7, top
                     x_pad = x
                 out = model(x_pad)
                 logits_out = out[0] if isinstance(out, tuple) else out
-                # Extraemos el logit del ÚLTIMO token real, no del padding
                 logits_step = logits_out[:, seq_len - 1, :] / temperature
             else:
                 if logits is None:
@@ -158,11 +163,15 @@ def main():
     print(f"=====================================")
 
     test_prompts = [
+        "Once upon a time, there was a little girl named Lily who",
+        "One day, Tim and his dog went to the park to",
+        "Sara wanted to bake a big chocolate cake, so she",
+        "The little boy found a shiny key on the ground and",
         "Para calcular la hipotenusa de un triángulo rectángulo",
         "El presidente de los Estados Unidos",
         "def fibonacci(n):",
         "La capital de Francia es",
-        "[SYSTEM] You are TinyThinker. [/SYSTEM]\nUser: Escribe un poema sobre el mar.\nAssistant:"
+        "[SYSTEM] You are TinyThinker. [/SYSTEM]\nUser: Tell me a story about a friendly dragon.\nAssistant:"
     ]
 
     for prompt in test_prompts:

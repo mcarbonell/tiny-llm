@@ -27,23 +27,26 @@ This project is the culmination of a fractal evolution of sovereign algorithms:
 * **Learnable Substrate Lerp FFN Router (`v328`):** Multi-bank orthogonal transform router (FWHT + DCT-II + DWT Haar) saving **49.4% FFN parameter weights** and **38.0% total model parameters**.
 * **Rigorous FP64 Gradcheck Audit:** Verified with PyTorch `autograd.gradcheck` in FP64 (`scratch/test_fp64_gradcheck.py`) passing natively with **$7.39 \times 10^{-16}$ global L2 relative gradient error**.
 
-### 2. Google Colab Active Pre-training & Quantitative Validation Run
-* **Hardware:** GPU Tesla T4 CUDA (15.3 GB VRAM, Driver 580.82.07, CUDA 13.0).
+### 2. Preentrenamiento Completado (2,000 Iteraciones - 65.5M Tokens)
+* **Hardware:** CPU 8 threads (69.4 horas de cómputo ininterrumpido).
 * **Config:** `configs/train_v12_colab_t4.yaml` (72.41M params, `dim=1024`, `n_layers=8`, `n_heads=8`, `vocab_size=16384`, `batch_size=4`, `grad_accum_steps=8`, 32,768 tokens/iter, `learning_rate=0.0004`, `weight_decay=0.0`).
-* **Progreso de Métricas Cuantitativas:**
-  - Iter 0: `loss 9.7279` ($\text{Entropía inicial } \ln(16384)$, $PPL = 16,779.3$)
-  - Iter 50: `loss 5.0960` ($PPL = 163.3$, fin de warmup)
-  - Iter 100: `loss 3.7210` ($PPL = 41.3$)
-  - Iter 200: `loss 2.9831` ($PPL = 19.7$)
-  - **Iter 250 (Validation Checkpoint):** `train_loss 2.8565`, **`val_loss 2.8486`** ($PPL = 17.26$, guardado `ckpt_pretrain_best.pt`)
-  - **Iter 270:** **`loss 2.5184`** (**$PPL = 12.41$**, mínimo histórico en train)
-  - Iter 290: `loss 2.7384` ($PPL = 15.46$, 14.5% del presupuesto total de 2000 iters)
+* **Métricas de Convergencia Finales:**
+  - Iter 0: `train_loss 9.7336`, `val_loss 9.7402` ($\text{Entropía inicial } \ln(16384)$, $PPL = 16,986$)
+  - Iter 500: `train_loss 5.1204`, `val_loss 4.1950` ($PPL = 66.35$)
+  - Iter 1000: `train_loss 4.7088`, `val_loss 3.7314` ($PPL = 41.73$)
+  - Iter 1500: `train_loss 4.4220`, `val_loss 3.5068` ($PPL = 33.34$)
+  - **Iter 2000 (FINAL):** `train_loss 4.4875`, **`val_loss 3.4251`** (**$PPL = 30.72$**, guardado en `checkpoints/v12_delta_phase/ckpt_pretrain_best.pt`)
+
+### 3. Distribución del Router Espectral de Substratos (V12 Lerp Router)
+El router multibank (FWHT + DCT-II + DWT Haar) convergió a un equilibrio tripartito estable a través de las 8 capas residuales:
+* **FWHT (Walsh-Hadamard binario):** ~32.7%
+* **DCT-II (Cosenos discretos):** ~32.7%
+* **DWT Haar (Ondículas multinivel):** ~34.6%
+*(Ahorro del 49.4% de pesos en los FFNs con $100\%$ de gradientes estables).*
 
 > [!NOTE]
-> **Aviso de Resultados Provisionales & Pendientes:**
-> - Las métricas de Loss (`2.5184`) y Perplejidad ($PPL = 12.41$) reflejan la excelente salud cuantitativa y convergencia rápida del modelo de fase espectral.
-> - **Resultados Provisionales:** Estas cifras son cuantitativas durante el entrenamiento activo.
-> - **Generación de Muestras Pendiente:** La generación cualitativa de muestras de texto (*text sampling*) y la evaluación de coherencia sintáctica se realizarán mediante `scripts/sample.py` al concluir el entrenamiento o realizar checkpoints intermedios.
+> **Siguiente Paso Operativo:** El checkpoint óptimo `checkpoints/v12_delta_phase/ckpt_pretrain_best.pt` está listo para realizar muestreo y generación de texto (*text sampling*) con `scripts/test_generation.py` o `scripts/chat.py` para auditar la coherencia sintáctica del modelo.
+
 
 
 ---

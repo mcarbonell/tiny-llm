@@ -16,7 +16,13 @@ from model.model_coga import TinyThinkerCOGA, ModelArgs as CogaArgs
 from model.model_spectral import SpectralThinker, SpectralArgs
 from model.model_spectral_v4 import SpectralThinker as SpectralThinkerV4, SpectralArgs as SpectralArgsV4
 from model.model_spectral_v5 import SpectralThinker as SpectralThinkerV5, SpectralArgs as SpectralArgsV5
+from model.model_spectral_v6 import SpectralThinker as SpectralThinkerV6, SpectralArgs as SpectralArgsV6
+from model.model_spectral_v7 import SpectralThinker as SpectralThinkerV7, SpectralArgs as SpectralArgsV7
 from model.model_coga_spectral import TinyThinkerCogaSpectral, CogaSpectralArgs
+from model.model_analog import TinyThinkerAnalog, AnalogArgs
+from model.model_spectral_v10_hippocampus import SpectralThinkerV10, SpectralArgsV10
+from model.model_spectral_v11_albert import SpectralThinkerV11, SpectralArgsV11
+from model.model_spectral_v12_delta_phase import SpectralThinkerV12, SpectralArgsV12
 
 # -----------------
 # Configuración
@@ -273,7 +279,7 @@ def main():
 
     print(f"Using checkpoint: {os.path.basename(ckpt_path)}")
     
-    torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, SpectralArgsV6, SpectralArgsV7, CogaSpectralArgs, AnalogArgs])
+    torch.serialization.add_safe_globals([DenseArgs, MoEArgs, CogaArgs, SpectralArgs, SpectralArgsV4, SpectralArgsV5, SpectralArgsV6, SpectralArgsV7, CogaSpectralArgs, AnalogArgs, SpectralArgsV10, SpectralArgsV11, SpectralArgsV12])
     checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
     model_args = checkpoint['args']
     arch = checkpoint.get('arch', 'dense')
@@ -311,6 +317,12 @@ def main():
         model = TinyThinkerCogaSpectral(model_args)
     elif arch == 'analog':
         model = TinyThinkerAnalog(model_args)
+    elif arch == 'spectral_v10':
+        model = SpectralThinkerV10(model_args)
+    elif arch == 'spectral_v11':
+        model = SpectralThinkerV11(model_args)
+    elif arch == 'spectral_v12':
+        model = SpectralThinkerV12(model_args)
     else:
         raise ValueError(f"Arquitectura desconocida en checkpoint: {arch}")
 
